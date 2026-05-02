@@ -46,7 +46,7 @@ class _ContactCondoPageState extends State<ContactCondoPage> {
       setState(() {
         _unitLoading = false;
         _unitError =
-            'Não foi possível identificar sua unidade. Selecione em Minha Unidade.';
+            'Não foi possível identificar sua unidade! Selecione em Minha Unidade.';
       });
       return;
     }
