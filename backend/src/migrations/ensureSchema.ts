@@ -71,6 +71,19 @@ export async function ensureSchema(): Promise<void> {
     alter table maintenance_requests add column if not exists syndic_response text;
     alter table maintenance_requests add column if not exists updated_at timestamptz not null default now();
 
+    create table if not exists app_users (
+      id serial primary key,
+      condo_id integer not null references condos(id) on delete cascade,
+      unit_id integer references units(id) on delete set null,
+      full_name varchar(150) not null,
+      login varchar(80) not null unique,
+      password_plain varchar(120) not null,
+      role varchar(30) not null
+        check (role in ('syndic', 'administrator', 'resident', 'partner', 'collaborator')),
+      active boolean not null default true,
+      created_at timestamptz not null default now()
+    );
+
     create table if not exists maintenance_request_messages (
       id serial primary key,
       maintenance_request_id integer not null references maintenance_requests(id) on delete cascade,
@@ -216,19 +229,6 @@ export async function ensureSchema(): Promise<void> {
       category varchar(80) not null,
       amount numeric(14, 2) not null,
       description text,
-      created_at timestamptz not null default now()
-    );
-
-    create table if not exists app_users (
-      id serial primary key,
-      condo_id integer not null references condos(id) on delete cascade,
-      unit_id integer references units(id) on delete set null,
-      full_name varchar(150) not null,
-      login varchar(80) not null unique,
-      password_plain varchar(120) not null,
-      role varchar(30) not null
-        check (role in ('syndic', 'administrator', 'resident', 'partner', 'collaborator')),
-      active boolean not null default true,
       created_at timestamptz not null default now()
     );
 
