@@ -1,0 +1,24 @@
+Área do sindico - OK
+Administradora - OK
+Minha unidade - OK
+Controle de acesso - OK
+Boleto Online - OK (Falta o serviço)
+Ofertas - OK
+Fale com o condomínio - OK
+Reserva de Espaços - OK
+Mural de avisos - OK
+Comunicados individuais - OK
+Solicitar Manutenção - OK
+Assembleias Virtuais - OK
+Videoconferência - OK
+Enquete e Votações - OK
+Documentos - OK
+Mercado interno - OK
+Calendário de eventos - OK
+Guia de serviços - OK
+Achados e perdidos - OK
+Contatos - OK
+Quadro de colaboradores - OK
+Animais de estimação - OK
+Encomendas - OK
+Emergência - OK 
