@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import multer from 'multer';
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 
 import { isBillingStaff } from '../authz';
 import { query } from '../db';
@@ -423,7 +423,7 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+const updateDocumentMetadata: RequestHandler = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const condoId = parseCondoId(req.query.condoId);
@@ -557,6 +557,10 @@ router.patch('/:id', async (req, res, next) => {
   } catch (err) {
     return next(err);
   }
-});
+};
+
+/** PATCH e PUT: alguns proxies bloqueiam PATCH; clientes usam PUT por defeito. */
+router.patch('/:id', updateDocumentMetadata);
+router.put('/:id', updateDocumentMetadata);
 
 export default router;
