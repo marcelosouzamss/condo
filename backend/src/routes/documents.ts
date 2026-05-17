@@ -115,12 +115,23 @@ function normalizeAppRole(raw: unknown): string {
   }
 }
 
+function canAccessDocumentsCondo(user: AppUserRow, condoId: number): boolean {
+  if (user.active !== true) {
+    return false;
+  }
+  if (userCondoMatches(user.condo_id, condoId)) {
+    return true;
+  }
+  const role = normalizeAppRole(user.role);
+  return role === 'administrator' || role === 'partner';
+}
+
 /** Envio e exclusão: síndico, administração, colaboradores e parceiros do condomínio. */
 function canPublishDocuments(user: AppUserRow, condoId: number): boolean {
   const role = normalizeAppRole(user.role);
   return (
     user.active === true &&
-    userCondoMatches(user.condo_id, condoId) &&
+    canAccessDocumentsCondo(user, condoId) &&
     (isBillingStaff(role) || role === 'collaborator' || role === 'partner')
   );
 }
@@ -130,7 +141,7 @@ function canPublishDocuments(user: AppUserRow, condoId: number): boolean {
  * Parceiros publicam documentos mas só veem o que é para todos ou inclui o seu perfil.
  */
 function seesAllCondoDocuments(user: AppUserRow, condoId: number): boolean {
-  if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
+  if (!canAccessDocumentsCondo(user, condoId)) {
     return false;
   }
   const role = normalizeAppRole(user.role);
@@ -143,7 +154,7 @@ function canEditDocument(
   condoId: number,
   postedByUserId: number | null,
 ): boolean {
-  if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
+  if (!canAccessDocumentsCondo(user, condoId)) {
     return false;
   }
   if (isBillingStaff(normalizeAppRole(user.role))) {
@@ -234,8 +245,8 @@ router.get('/', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!userCondoMatches(user.condo_id, condoId)) {
-      return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
+    if (!canAccessDocumentsCondo(user, condoId)) {
+      return res.status(403).json({ message: 'Sem permissao para acessar documentos deste condominio.' });
     }
     const requestedRole = normalizeAppRole(req.query.userRole ?? req.query.role);
     const effectiveUser: AppUserRow = {

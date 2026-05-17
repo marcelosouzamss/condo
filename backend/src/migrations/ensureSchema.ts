@@ -1210,27 +1210,26 @@ export async function ensureSchema(): Promise<void> {
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Carlos Sindico', 'sindico', 'sindico', 'syndic', true
-    from condos c
-    where c.name = 'Residencial Jardim Central'
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
+    where true
       and not exists (select 1 from app_users au where lower(au.login) = lower('sindico'));
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Ana Administradora', 'administradora', 'administradora', 'administrator', true
-    from condos c
-    where c.name = 'Residencial Jardim Central'
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
+    where true
       and not exists (select 1 from app_users au where lower(au.login) = lower('administradora'));
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, u.id, 'Mariana Moradora', 'morador', 'morador', 'resident', true
-    from condos c
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
     join units u on u.condo_id = c.id and u.tower = 'B' and u.number = '202'
-    where c.name = 'Residencial Jardim Central'
+    where true
       and not exists (select 1 from app_users au where lower(au.login) = lower('morador'));
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Paulo Parceiro', 'parceiro', 'parceiro', 'partner', true
-    from condos c
-    where c.name = 'Residencial Jardim Central'
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
     on conflict (login) do update set
       condo_id = excluded.condo_id,
       unit_id = excluded.unit_id,
@@ -1241,8 +1240,7 @@ export async function ensureSchema(): Promise<void> {
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Laura Colaboradora', 'colaborador', 'colaborador', 'collaborator', true
-    from condos c
-    where c.name = 'Residencial Jardim Central'
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
     on conflict (login) do update set
       condo_id = excluded.condo_id,
       unit_id = excluded.unit_id,
@@ -1250,6 +1248,57 @@ export async function ensureSchema(): Promise<void> {
       password_plain = excluded.password_plain,
       role = excluded.role,
       active = excluded.active;
+
+    -- Mantem os logins de demonstracao no mesmo condominio base dos dados seed.
+    -- Se existirem condominios duplicados com o mesmo nome, usa sempre o menor id.
+    with demo_condo as (
+      select id
+      from (
+        select au.condo_id as id, 0 as priority
+        from app_users au
+        where lower(au.login) = lower('sindico')
+        union all
+        select c.id, 1 as priority
+        from condos c
+        where c.name = 'Residencial Jardim Central'
+        union all
+        select c.id, 2 as priority
+        from condos c
+      ) candidates
+      order by priority asc, id asc
+      limit 1
+    ),
+    demo_unit as (
+      select u.id
+      from units u
+      join demo_condo dc on dc.id = u.condo_id
+      where u.tower = 'B' and u.number = '202'
+      order by u.id asc
+      limit 1
+    )
+    update app_users au
+    set condo_id = dc.id,
+        unit_id = case
+          when lower(au.login) = lower('morador') then (select id from demo_unit)
+          else null
+        end,
+        role = case lower(au.login)
+          when lower('sindico') then 'syndic'
+          when lower('administradora') then 'administrator'
+          when lower('morador') then 'resident'
+          when lower('parceiro') then 'partner'
+          when lower('colaborador') then 'collaborator'
+          else au.role
+        end,
+        active = true
+    from demo_condo dc
+    where lower(au.login) in (
+      lower('sindico'),
+      lower('administradora'),
+      lower('morador'),
+      lower('parceiro'),
+      lower('colaborador')
+    );
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Administrador Plataforma', 'admin_plataforma', 'admin123', 'admin', true
