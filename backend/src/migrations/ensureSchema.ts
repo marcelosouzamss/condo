@@ -9,6 +9,7 @@ export async function ensureSchema(): Promise<void> {
     );
 
     alter table condos add column if not exists login_logo_path varchar(500);
+    alter table condos add column if not exists login_background_path varchar(500);
 
     create table if not exists units (
       id serial primary key,
@@ -275,6 +276,25 @@ export async function ensureSchema(): Promise<void> {
 
     create index if not exists relation_messages_thread_id_idx
       on relation_messages (thread_id, created_at asc);
+
+    -- Threads de relacionamento iniciadas por parceiros (sem unidade no condomínio).
+    alter table relation_threads alter column unit_id drop not null;
+    alter table relation_threads add column if not exists partner_user_id integer references app_users(id) on delete cascade;
+    alter table relation_threads drop constraint if exists relation_threads_condo_id_unit_id_channel_key;
+    create unique index if not exists relation_threads_condo_unit_channel_uq
+      on relation_threads (condo_id, unit_id, channel) where unit_id is not null;
+    create unique index if not exists relation_threads_condo_partner_channel_uq
+      on relation_threads (condo_id, partner_user_id, channel) where partner_user_id is not null;
+    alter table relation_threads drop constraint if exists relation_threads_participant_chk;
+    alter table relation_threads add constraint relation_threads_participant_chk
+      check (
+        (unit_id is not null and partner_user_id is null)
+        or (unit_id is null and partner_user_id is not null)
+      );
+
+    alter table relation_messages drop constraint if exists relation_messages_sender_side_check;
+    alter table relation_messages add constraint relation_messages_sender_side_check
+      check (sender_side in ('resident', 'staff', 'partner'));
 
     create table if not exists individual_communications (
       id serial primary key,
@@ -654,6 +674,43 @@ export async function ensureSchema(): Promise<void> {
     create index if not exists condo_collaborator_shifts_condo_idx
       on condo_collaborator_shifts (condo_id, shift_date, sort_order);
 
+    create table if not exists shift_handover_areas (
+      id serial primary key,
+      condo_id integer not null references condos(id) on delete cascade,
+      name varchar(150) not null,
+      service_name varchar(150) not null,
+      instructions text,
+      active boolean not null default true,
+      created_by_user_id integer not null references app_users(id) on delete restrict,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create index if not exists shift_handover_areas_condo_idx
+      on shift_handover_areas (condo_id, active, name);
+
+    create table if not exists shift_handover_area_members (
+      area_id integer not null references shift_handover_areas(id) on delete cascade,
+      user_id integer not null references app_users(id) on delete cascade,
+      created_at timestamptz not null default now(),
+      primary key (area_id, user_id)
+    );
+
+    create index if not exists shift_handover_area_members_user_idx
+      on shift_handover_area_members (user_id, area_id);
+
+    create table if not exists shift_handover_entries (
+      id serial primary key,
+      condo_id integer not null references condos(id) on delete cascade,
+      area_id integer not null references shift_handover_areas(id) on delete cascade,
+      author_user_id integer not null references app_users(id) on delete restrict,
+      body text not null,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists shift_handover_entries_area_idx
+      on shift_handover_entries (area_id, created_at desc);
+
     create table if not exists condo_service_catalog (
       id serial primary key,
       condo_id integer not null references condos(id) on delete cascade,
@@ -685,6 +742,8 @@ export async function ensureSchema(): Promise<void> {
     update condo_service_catalog set visible = true where visible is null;
     alter table condo_service_catalog alter column visible set default true;
     alter table condo_service_catalog alter column visible set not null;
+
+    alter table condo_service_catalog add column if not exists provider_whatsapp varchar(50);
 
     create table if not exists condo_service_catalog_photos (
       id serial primary key,
@@ -914,7 +973,7 @@ export async function ensureSchema(): Promise<void> {
   await query(`
     alter table app_users drop constraint if exists app_users_role_check;
     alter table app_users add constraint app_users_role_check
-      check (role in ('syndic', 'administrator', 'resident', 'partner', 'collaborator'));
+      check (role in ('admin', 'syndic', 'administrator', 'resident', 'partner', 'collaborator'));
 
     alter table individual_communications
       drop constraint if exists individual_communications_from_staff_role_check;
@@ -1165,6 +1224,11 @@ export async function ensureSchema(): Promise<void> {
       password_plain = excluded.password_plain,
       role = excluded.role,
       active = excluded.active;
+
+    insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
+    select c.id, null, 'Administrador Plataforma', 'admin_plataforma', 'admin123', 'admin', true
+    from (select id from condos order by id asc limit 1) as c(id)
+    where not exists (select 1 from app_users au where lower(au.login) = lower('admin_plataforma'));
 
     insert into events (
       condo_id, title, description, event_date, event_end, location, visibility, created_by_user_id

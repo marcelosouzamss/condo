@@ -63,6 +63,15 @@ type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
 const URGENCY_LEVELS = ['normal', 'urgent'] as const;
 type UrgencyLevel = (typeof URGENCY_LEVELS)[number];
 
+const NOTICE_AUDIENCE_ROLES = new Set([
+  'admin',
+  'syndic',
+  'administrator',
+  'resident',
+  'partner',
+  'collaborator',
+]);
+
 const OCCURRENCE_STATUSES = ['open', 'in_progress', 'closed'] as const;
 type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number];
 
@@ -77,6 +86,29 @@ function condoIdFromReq(req: Request): number | null {
     return null;
   }
   return id;
+}
+
+function normalizeNoticeAudience(raw: unknown): string | null {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (Array.isArray(raw)) {
+    const roles = raw
+      .map((item) => String(item ?? '').trim().toLowerCase())
+      .filter((role) => NOTICE_AUDIENCE_ROLES.has(role));
+    const unique = [...new Set(roles)];
+    return unique.length > 0 ? unique.join(',') : null;
+  }
+  const text = String(raw).trim();
+  if (!text) {
+    return null;
+  }
+  const roles = text
+    .split(/[,\s;|]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter((role) => NOTICE_AUDIENCE_ROLES.has(role));
+  const unique = [...new Set(roles)];
+  return unique.length > 0 ? unique.join(',') : text;
 }
 
 function parseUserId(raw: unknown): number | null {
@@ -565,6 +597,7 @@ router.post('/notices', async (req, res, next) => {
       expiresAt?: unknown | null;
     };
     const { title, content, urgency = 'normal', isPinned = false, audience } = body;
+    const normalizedAudience = normalizeNoticeAudience(audience);
 
     if (!title?.trim() || !content?.trim()) {
       return res.status(400).json({ message: 'title e content sao obrigatorios.' });
@@ -608,7 +641,7 @@ router.post('/notices', async (req, res, next) => {
       content.trim(),
       urgency,
       Boolean(isPinned),
-      audience?.trim() || null,
+      normalizedAudience,
       publishedAt.toISOString(),
       expiresAt != null ? expiresAt.toISOString() : null,
     ]);
@@ -733,11 +766,7 @@ router.patch('/notices/:id', async (req, res, next) => {
     }
     if (audience !== undefined) {
       sets.push(`audience = $${p++}`);
-      params.push(
-        audience === null || audience === ''
-          ? null
-          : String(audience).trim() || null,
-      );
+      params.push(normalizeNoticeAudience(audience));
     }
 
     if (publishedAt !== undefined) {

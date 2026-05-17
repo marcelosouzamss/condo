@@ -12,7 +12,7 @@ const router = Router();
 
 const UPLOADS_ROOT = path.join(process.cwd(), 'uploads');
 
-const loginLogoUpload = multer({
+const loginBrandingImageUpload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
       const condoId = parseCondoId(req.query.condoId);
@@ -28,7 +28,9 @@ const loginLogoUpload = multer({
   }),
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
+    const ok =
+      /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype) ||
+      /\.(jpe?g|png|gif|webp)$/i.test(file.originalname);
     cb(null, ok);
   },
 });
@@ -1359,6 +1361,25 @@ router.patch('/app-users/:id', async (req, res, next) => {
   }
 });
 
+function relativeBrandingPath(condoId: number, filename: string): string {
+  return path.posix.join('branding', `condo-${condoId}`, filename);
+}
+
+function deleteBrandingFile(relativePath: string | null): void {
+  if (relativePath == null || String(relativePath).trim() === '') {
+    return;
+  }
+  const oldRel = String(relativePath).trim().replace(/\\/g, '/');
+  const oldFull = path.join(UPLOADS_ROOT, ...oldRel.split('/'));
+  try {
+    if (fs.existsSync(oldFull)) {
+      fs.unlinkSync(oldFull);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 router.get('/condo-login-branding', async (req, res, next) => {
   try {
     const condoId = parseCondoId(req.query.condoId as unknown);
@@ -1371,7 +1392,8 @@ router.get('/condo-login-branding', async (req, res, next) => {
       return res.status(403).json({ message: 'Sem permissao para editar aparencia da tela de login.' });
     }
     const r = await query(
-      `select id, name, login_logo_path from condos where id = $1 limit 1`,
+      `select id, name, login_logo_path, login_background_path
+       from condos where id = $1 limit 1`,
       [condoId],
     );
     if (r.rows.length === 0) {
@@ -1381,6 +1403,7 @@ router.get('/condo-login-branding', async (req, res, next) => {
       id: number;
       name: string;
       login_logo_path: string | null;
+      login_background_path: string | null;
     };
     return res.json({
       condoId: row.id,
@@ -1388,6 +1411,11 @@ router.get('/condo-login-branding', async (req, res, next) => {
       logoRelativePath:
         row.login_logo_path != null && String(row.login_logo_path).trim() !== ''
           ? String(row.login_logo_path).trim()
+          : null,
+      backgroundRelativePath:
+        row.login_background_path != null &&
+        String(row.login_background_path).trim() !== ''
+          ? String(row.login_background_path).trim()
           : null,
     });
   } catch (err) {
@@ -1421,13 +1449,14 @@ router.patch('/condo-login-branding', async (req, res, next) => {
     }
     const u = await query(
       `update condos set name = $1 where id = $2
-       returning id, name, login_logo_path`,
+       returning id, name, login_logo_path, login_background_path`,
       [nm, condoId],
     );
     const row = u.rows[0] as {
       id: number;
       name: string;
       login_logo_path: string | null;
+      login_background_path: string | null;
     };
     return res.json({
       condoId: row.id,
@@ -1436,13 +1465,18 @@ router.patch('/condo-login-branding', async (req, res, next) => {
         row.login_logo_path != null && String(row.login_logo_path).trim() !== ''
           ? String(row.login_logo_path).trim()
           : null,
+      backgroundRelativePath:
+        row.login_background_path != null &&
+        String(row.login_background_path).trim() !== ''
+          ? String(row.login_background_path).trim()
+          : null,
     });
   } catch (err) {
     return next(err);
   }
 });
 
-router.post('/condo-login-logo', loginLogoUpload.single('logo'), async (req, res, next) => {
+router.post('/condo-login-logo', loginBrandingImageUpload.single('logo'), async (req, res, next) => {
   try {
     const condoId = parseCondoId(req.query.condoId as unknown);
     const actorId = parsePositive(req.query.userId as unknown);
@@ -1458,7 +1492,7 @@ router.post('/condo-login-logo', loginLogoUpload.single('logo'), async (req, res
       return res.status(400).json({ message: 'Arquivo logo e obrigatorio (campo logo).' });
     }
     const ex = await query(
-      `select login_logo_path from condos where id = $1`,
+      `select login_logo_path, login_background_path from condos where id = $1`,
       [condoId],
     );
     if (ex.rows.length === 0) {
@@ -1469,40 +1503,106 @@ router.post('/condo-login-logo', loginLogoUpload.single('logo'), async (req, res
       }
       return res.status(404).json({ message: 'Condominio nao encontrado.' });
     }
-    const prev = ex.rows[0] as { login_logo_path: string | null };
-    if (prev.login_logo_path != null && String(prev.login_logo_path).trim() !== '') {
-      const oldRel = String(prev.login_logo_path).trim().replace(/\\/g, '/');
-      const oldFull = path.join(UPLOADS_ROOT, ...oldRel.split('/'));
-      try {
-        if (fs.existsSync(oldFull)) {
-          fs.unlinkSync(oldFull);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    const rel = path.posix.join('branding', `condo-${condoId}`, file.filename);
+    const prev = ex.rows[0] as {
+      login_logo_path: string | null;
+      login_background_path: string | null;
+    };
+    deleteBrandingFile(prev.login_logo_path);
+    const rel = relativeBrandingPath(condoId, file.filename);
     await query(`update condos set login_logo_path = $1 where id = $2`, [
       rel,
       condoId,
     ]);
     const r = await query(
-      `select id, name, login_logo_path from condos where id = $1`,
+      `select id, name, login_logo_path, login_background_path from condos where id = $1`,
       [condoId],
     );
     const row = r.rows[0] as {
       id: number;
       name: string;
       login_logo_path: string | null;
+      login_background_path: string | null;
     };
     return res.status(201).json({
       condoId: row.id,
       condominiumName: row.name,
       logoRelativePath: rel,
+      backgroundRelativePath:
+        row.login_background_path != null &&
+        String(row.login_background_path).trim() !== ''
+          ? String(row.login_background_path).trim()
+          : null,
     });
   } catch (err) {
     return next(err);
   }
 });
+
+router.post(
+  '/condo-login-background',
+  loginBrandingImageUpload.single('background'),
+  async (req, res, next) => {
+    try {
+      const condoId = parseCondoId(req.query.condoId as unknown);
+      const actorId = parsePositive(req.query.userId as unknown);
+      if (actorId == null || condoId == null) {
+        return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
+      }
+      const actor = await loadHubUser(actorId);
+      if (!hubBillingAuthorized(actor, condoId)) {
+        return res.status(403).json({ message: 'Sem permissao.' });
+      }
+      const file = req.file;
+      if (file == null) {
+        return res.status(400).json({
+          message: 'Arquivo background e obrigatorio (campo background).',
+        });
+      }
+      const ex = await query(
+        `select login_logo_path, login_background_path from condos where id = $1`,
+        [condoId],
+      );
+      if (ex.rows.length === 0) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          /* ignore */
+        }
+        return res.status(404).json({ message: 'Condominio nao encontrado.' });
+      }
+      const prev = ex.rows[0] as {
+        login_logo_path: string | null;
+        login_background_path: string | null;
+      };
+      deleteBrandingFile(prev.login_background_path);
+      const rel = relativeBrandingPath(condoId, file.filename);
+      await query(`update condos set login_background_path = $1 where id = $2`, [
+        rel,
+        condoId,
+      ]);
+      const r = await query(
+        `select id, name, login_logo_path, login_background_path from condos where id = $1`,
+        [condoId],
+      );
+      const row = r.rows[0] as {
+        id: number;
+        name: string;
+        login_logo_path: string | null;
+        login_background_path: string | null;
+      };
+      return res.status(201).json({
+        condoId: row.id,
+        condominiumName: row.name,
+        logoRelativePath:
+          row.login_logo_path != null && String(row.login_logo_path).trim() !== ''
+            ? String(row.login_logo_path).trim()
+            : null,
+        backgroundRelativePath: rel,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
 
 export default router;

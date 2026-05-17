@@ -18,6 +18,7 @@ import pollsRouter from './routes/polls';
 import relationsRouter from './routes/relations';
 import reservationSpacesRouter from './routes/reservationSpaces';
 import serviceGuideRouter from './routes/serviceGuide';
+import shiftHandoversRouter from './routes/shiftHandovers';
 import syndicRouter from './routes/syndic';
 import billingRouter, { billingPaymentWebhook } from './routes/billing';
 import videoRoomsRouter from './routes/videoRooms';
@@ -25,6 +26,7 @@ import virtualAssembliesRouter from './routes/virtualAssemblies';
 import accessControlRouter from './routes/accessControl';
 import emergencyRouter from './routes/emergency';
 import parcelDeliveriesRouter from './routes/parcelDeliveries';
+import condosRegistryRouter from './routes/condosRegistry';
 
 const app = express();
 
@@ -109,10 +111,40 @@ function parseCondoIdNotices(raw: unknown): number {
   return Number.isFinite(id) && id > 0 ? id : 1;
 }
 
+const NOTICE_AUDIENCE_ROLES = new Set([
+  'admin',
+  'syndic',
+  'administrator',
+  'resident',
+  'partner',
+  'collaborator',
+]);
+
+function parseNoticeAudienceRoles(raw: unknown): string[] {
+  const s = String(raw ?? '').trim();
+  if (!s) {
+    return [];
+  }
+  return s
+    .split(/[,\s;|]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => NOTICE_AUDIENCE_ROLES.has(part));
+}
+
+function noticeVisibleForRole(audience: unknown, role: unknown): boolean {
+  const roles = parseNoticeAudienceRoles(audience);
+  if (roles.length === 0) {
+    return true;
+  }
+  const viewerRole = String(role ?? '').trim().toLowerCase();
+  return roles.includes(viewerRole);
+}
+
 app.get('/api/notices', async (req, res, next) => {
   try {
     const condoId = parseCondoIdNotices(req.query.condoId);
     const includeArchived = req.query.includeArchived === 'true';
+    const viewerRole = req.query.userRole ?? req.query.role;
 
     const result = await query(
       `select n.id, n.title, n.content, n.published_at, n.expires_at, n.is_pinned, n.is_archived,
@@ -142,7 +174,11 @@ app.get('/api/notices', async (req, res, next) => {
       [condoId, includeArchived],
     );
 
-    return res.json(result.rows);
+    return res.json(
+      result.rows.filter((row: Record<string, unknown>) =>
+        noticeVisibleForRole(row.audience, viewerRole),
+      ),
+    );
   } catch (error) {
     return next(error);
   }
@@ -159,7 +195,7 @@ app.get('/api/auth/login-appearance', async (req, res, next) => {
     const id = Number.isFinite(condoId) && condoId > 0 ? condoId : 1;
 
     const r = await query(
-      `select id, name, login_logo_path from condos where id = $1 limit 1`,
+      `select id, name, login_logo_path, login_background_path from condos where id = $1 limit 1`,
       [id],
     );
     if (r.rows.length === 0) {
@@ -167,12 +203,14 @@ app.get('/api/auth/login-appearance', async (req, res, next) => {
         condoId: id,
         condominiumName: 'Condominio',
         logoRelativePath: null as string | null,
+        backgroundRelativePath: null as string | null,
       });
     }
     const row = r.rows[0] as {
       id: number;
       name: string;
       login_logo_path: string | null;
+      login_background_path: string | null;
     };
     return res.json({
       condoId: row.id,
@@ -181,11 +219,18 @@ app.get('/api/auth/login-appearance', async (req, res, next) => {
         row.login_logo_path != null && String(row.login_logo_path).trim() !== ''
           ? String(row.login_logo_path).trim()
           : null,
+      backgroundRelativePath:
+        row.login_background_path != null &&
+        String(row.login_background_path).trim() !== ''
+          ? String(row.login_background_path).trim()
+          : null,
     });
   } catch (error) {
     return next(error);
   }
 });
+
+app.use('/api/condos', condosRegistryRouter);
 
 app.post('/api/auth/login', async (req, res, next) => {
   try {
@@ -240,6 +285,7 @@ app.use('/api/individual-comms', individualCommsRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/contacts', contactsRouter);
 app.use('/api/collaborators', collaboratorsRouter);
+app.use('/api/shift-handovers', shiftHandoversRouter);
 app.use('/api/service-guide', serviceGuideRouter);
 app.use('/api/offers', offersRouter);
 app.use('/api/agenda', agendaRouter);

@@ -12,13 +12,44 @@ const router = Router();
 
 const UPLOADS_ROOT = path.join(process.cwd(), 'uploads');
 
+/** node-pg por vezes devolve json_agg como string; o app precisa sempre de um array. */
+function parsePortfolioPhotosRaw(raw: unknown): unknown[] {
+  if (raw == null) {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeCatalogRow(row: Record<string, unknown>): Record<string, unknown> {
+  const pp = parsePortfolioPhotosRaw(row.portfolio_photos);
+  return { ...row, portfolio_photos: pp };
+}
+
 const PORTFOLIO_MAX_PHOTOS = 12;
 
 const serviceGuidePhotoUpload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
       const condoId = parseCondoIdQuery(req.query.condoId);
-      const sid = parsePositive(req.params.serviceId);
+      const fromParams = parsePositive(req.params.serviceId);
+      const fromPath =
+        fromParams ??
+        (() => {
+          const m = /\/catalog\/(\d+)\/upload-photo/i.exec(req.path ?? '');
+          return m ? parsePositive(m[1]) : null;
+        })();
+      const sid = fromPath;
       const dir = path.join(
         UPLOADS_ROOT,
         'service-guide',
@@ -35,8 +66,24 @@ const serviceGuidePhotoUpload = multer({
   }),
   limits: { fileSize: 6 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
-    cb(null, ok);
+    const mime = String(file.mimetype || '').toLowerCase();
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const imageExts = new Set([
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.webp',
+      '.heic',
+      '.heif',
+      '.bmp',
+    ]);
+    const mimeOk = /^image\/(jpeg|jpg|jpe|png|gif|webp|heic|heif|bmp)$/i.test(
+      mime,
+    );
+    const octetOk =
+      mime === 'application/octet-stream' && imageExts.has(ext);
+    cb(null, mimeOk || octetOk);
   },
 });
 
@@ -240,6 +287,7 @@ router.get('/catalog', async (req, res, next) => {
                       svc.provider_name,
                       svc.provider_phone,
                       svc.provider_email,
+                      svc.provider_whatsapp,
                       svc.sort_order,
                       svc.active,
                       svc.scope,
@@ -262,7 +310,9 @@ router.get('/catalog', async (req, res, next) => {
     sql += ` order by svc.sort_order asc, svc.title asc`;
 
     const r = await query(sql, params);
-    return res.json(r.rows);
+    return res.json(
+      r.rows.map((row) => normalizeCatalogRow(row as Record<string, unknown>)),
+    );
   } catch (err) {
     return next(err);
   }
@@ -374,6 +424,7 @@ router.get('/catalog/:id', async (req, res, next) => {
               provider_name,
               provider_phone,
               provider_email,
+              provider_whatsapp,
               sort_order,
               active,
               scope,
@@ -394,7 +445,9 @@ router.get('/catalog/:id', async (req, res, next) => {
         return res.status(404).json({ message: 'Servico nao encontrado.' });
       }
     }
-    return res.json(r.rows[0]);
+    return res.json(
+      normalizeCatalogRow(r.rows[0] as Record<string, unknown>),
+    );
   } catch (err) {
     return next(err);
   }
@@ -420,6 +473,9 @@ router.post('/catalog', async (req, res, next) => {
       String(body.providerPhone ?? body.provider_phone ?? '').trim() || null;
     const providerEmail =
       String(body.providerEmail ?? body.provider_email ?? '').trim() || null;
+    const providerWhatsapp =
+      String(body.providerWhatsapp ?? body.provider_whatsapp ?? '').trim() ||
+      null;
     const sortOrderRaw = body.sortOrder ?? body.sort_order;
     const sortOrder =
       sortOrderRaw !== undefined &&
@@ -463,10 +519,10 @@ router.post('/catalog', async (req, res, next) => {
     const ins = await query(
       `insert into condo_service_catalog (
          condo_id, title, description, category,
-         provider_name, provider_phone, provider_email,
+         provider_name, provider_phone, provider_email, provider_whatsapp,
          sort_order, scope, visible, created_by_user_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning id,
                  condo_id,
                  title,
@@ -475,6 +531,7 @@ router.post('/catalog', async (req, res, next) => {
                  provider_name,
                  provider_phone,
                  provider_email,
+                 provider_whatsapp,
                  sort_order,
                  active,
                  scope,
@@ -490,6 +547,7 @@ router.post('/catalog', async (req, res, next) => {
         providerName,
         providerPhone,
         providerEmail,
+        providerWhatsapp,
         sortOrder,
         scope,
         visible,
@@ -551,6 +609,7 @@ router.patch('/catalog/:id', async (req, res, next) => {
 
     const cur = await query(
       `select title, description, category, provider_name, provider_phone, provider_email,
+              provider_whatsapp,
               sort_order, active, scope, visible
        from condo_service_catalog where id = $1`,
       [id],
@@ -562,6 +621,7 @@ router.patch('/catalog/:id', async (req, res, next) => {
       provider_name: string | null;
       provider_phone: string | null;
       provider_email: string | null;
+      provider_whatsapp: string | null;
       sort_order: number;
       active: boolean;
       scope: string;
@@ -574,6 +634,7 @@ router.patch('/catalog/:id', async (req, res, next) => {
     let nextPn = row.provider_name;
     let nextPp = row.provider_phone;
     let nextPe = row.provider_email;
+    let nextPw = row.provider_whatsapp;
     let nextSort = row.sort_order;
     let nextActive = row.active;
     let nextScope =
@@ -610,6 +671,16 @@ router.patch('/catalog/:id', async (req, res, next) => {
     if (body.providerEmail !== undefined || body.provider_email !== undefined) {
       nextPe =
         String(body.providerEmail ?? body.provider_email ?? '').trim() || null;
+      changed = true;
+    }
+    if (
+      body.providerWhatsapp !== undefined ||
+      body.provider_whatsapp !== undefined
+    ) {
+      nextPw =
+        String(
+          body.providerWhatsapp ?? body.provider_whatsapp ?? '',
+        ).trim() || null;
       changed = true;
     }
     if (body.sortOrder !== undefined || body.sort_order !== undefined) {
@@ -660,10 +731,11 @@ router.patch('/catalog/:id', async (req, res, next) => {
            provider_name = $5,
            provider_phone = $6,
            provider_email = $7,
-           sort_order = $8,
-           active = $9,
-           scope = $10,
-           visible = $11,
+           provider_whatsapp = $8,
+           sort_order = $9,
+           active = $10,
+           scope = $11,
+           visible = $12,
            updated_at = now()
        where id = $1
        returning id,
@@ -674,6 +746,7 @@ router.patch('/catalog/:id', async (req, res, next) => {
                  provider_name,
                  provider_phone,
                  provider_email,
+                 provider_whatsapp,
                  sort_order,
                  active,
                  scope,
@@ -689,6 +762,7 @@ router.patch('/catalog/:id', async (req, res, next) => {
         nextPn,
         nextPp,
         nextPe,
+        nextPw,
         nextSort,
         nextActive,
         nextScope,
@@ -715,10 +789,12 @@ router.patch('/catalog/:id', async (req, res, next) => {
     );
     const portfolioPhotos = (ph.rows[0] as { portfolio_photos: unknown })
       .portfolio_photos;
-    return res.json({
-      ...updatedRow,
-      portfolio_photos: portfolioPhotos,
-    });
+    return res.json(
+      normalizeCatalogRow({
+        ...updatedRow,
+        portfolio_photos: portfolioPhotos,
+      } as Record<string, unknown>),
+    );
   } catch (err) {
     return next(err);
   }
