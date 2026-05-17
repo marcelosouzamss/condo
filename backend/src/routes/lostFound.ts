@@ -27,8 +27,9 @@ const lostFoundPhotoUpload = multer({
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
-    cb(null, ok);
+    const extOk = /\.(jpe?g|png|gif|webp)$/i.test(file.originalname);
+    const mimeOk = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
+    cb(null, mimeOk || extOk);
   },
 });
 
@@ -68,6 +69,34 @@ function parseStatus(raw: unknown): Status | null {
     return s as Status;
   }
   return null;
+}
+
+function parsePhotoUrls(raw: unknown, fallback?: string | null): string[] {
+  let values: unknown[] = [];
+  if (Array.isArray(raw)) {
+    values = raw;
+  } else if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      const decoded = JSON.parse(raw);
+      values = Array.isArray(decoded) ? decoded : [raw];
+    } catch {
+      values = [raw];
+    }
+  } else if (fallback != null && String(fallback).trim() !== '') {
+    values = [fallback];
+  }
+
+  const out: string[] = [];
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text !== '' && !out.includes(text)) {
+      out.push(text);
+    }
+    if (out.length >= 4) {
+      break;
+    }
+  }
+  return out;
 }
 
 type AppUserRow = {
@@ -144,6 +173,8 @@ function contentFieldsInPatch(body: Record<string, unknown>): boolean {
     body.contact_hint !== undefined ||
     body.photoUrl !== undefined ||
     body.photo_url !== undefined ||
+    body.photoUrls !== undefined ||
+    body.photo_urls !== undefined ||
     body.kind !== undefined
   );
 }
@@ -308,6 +339,7 @@ router.get('/', async (req, res, next) => {
                       lf.description,
                       lf.contact_hint,
                       lf.photo_url,
+                      lf.photo_urls,
                       lf.status,
                       lf.created_by_user_id,
                       lf.created_at,
@@ -512,6 +544,7 @@ router.get('/:id', async (req, res, next) => {
               lf.description,
               lf.contact_hint,
               lf.photo_url,
+              lf.photo_urls,
               lf.status,
               lf.created_by_user_id,
               lf.created_at,
@@ -554,6 +587,7 @@ router.post('/', async (req, res, next) => {
     const contactHint = String(body.contactHint ?? body.contact_hint ?? '').trim() || null;
     const photoUrl =
       String(body.photoUrl ?? body.photo_url ?? '').trim() || null;
+    const photoUrls = parsePhotoUrls(body.photoUrls ?? body.photo_urls, photoUrl);
 
     if (!Number.isFinite(condoId) || condoId < 1) {
       return res.status(400).json({ message: 'condoId invalido.' });
@@ -589,9 +623,9 @@ router.post('/', async (req, res, next) => {
 
     const ins = await query(
       `insert into condo_lost_found (
-         condo_id, unit_id, kind, title, description, contact_hint, photo_url, created_by_user_id
+         condo_id, unit_id, kind, title, description, contact_hint, photo_url, photo_urls, created_by_user_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+       values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
        returning id,
                  condo_id,
                  unit_id,
@@ -600,11 +634,22 @@ router.post('/', async (req, res, next) => {
                  description,
                  contact_hint,
                  photo_url,
+                 photo_urls,
                  status,
                  created_by_user_id,
                  created_at,
                  updated_at`,
-      [condoId, unitId, kind, title, description, contactHint, photoUrl, userId],
+      [
+        condoId,
+        unitId,
+        kind,
+        title,
+        description,
+        contactHint,
+        photoUrls[0] ?? photoUrl,
+        JSON.stringify(photoUrls),
+        userId,
+      ],
     );
 
     const row = ins.rows[0] as Record<string, unknown>;
@@ -657,7 +702,7 @@ router.patch('/:id', async (req, res, next) => {
     }
 
     const existing = await query(
-      `select id, condo_id, unit_id, created_by_user_id, kind, title, description, contact_hint, photo_url, status
+      `select id, condo_id, unit_id, created_by_user_id, kind, title, description, contact_hint, photo_url, photo_urls, status
        from condo_lost_found
        where id = $1`,
       [id],
@@ -674,6 +719,7 @@ router.patch('/:id', async (req, res, next) => {
       description: string | null;
       contact_hint: string | null;
       photo_url: string | null;
+      photo_urls: unknown;
       status: string;
     };
 
@@ -689,6 +735,7 @@ router.patch('/:id', async (req, res, next) => {
     let nextDesc = row.description;
     let nextHint = row.contact_hint;
     let nextPhoto = row.photo_url;
+    let nextPhotos = parsePhotoUrls(row.photo_urls, row.photo_url);
     let nextKind = row.kind as Kind;
     let nextStatus = row.status as Status;
     let changed = false;
@@ -730,6 +777,11 @@ router.patch('/:id', async (req, res, next) => {
     if (body.photoUrl !== undefined || body.photo_url !== undefined) {
       nextPhoto =
         String(body.photoUrl ?? body.photo_url ?? '').trim() || null;
+      nextPhotos = parsePhotoUrls(body.photoUrls ?? body.photo_urls, nextPhoto);
+      changed = true;
+    } else if (body.photoUrls !== undefined || body.photo_urls !== undefined) {
+      nextPhotos = parsePhotoUrls(body.photoUrls ?? body.photo_urls, nextPhoto);
+      nextPhoto = nextPhotos[0] ?? null;
       changed = true;
     }
     if (body.kind !== undefined && String(body.kind).trim() !== '') {
@@ -760,8 +812,9 @@ router.patch('/:id', async (req, res, next) => {
            description = $4,
            contact_hint = $5,
            photo_url = $6,
-           kind = $7,
-           status = $8,
+           photo_urls = $7::jsonb,
+           kind = $8,
+           status = $9,
            updated_at = now()
        where id = $1
        returning id,
@@ -772,6 +825,7 @@ router.patch('/:id', async (req, res, next) => {
                  description,
                  contact_hint,
                  photo_url,
+                 photo_urls,
                  status,
                  created_by_user_id,
                  created_at,
@@ -783,6 +837,7 @@ router.patch('/:id', async (req, res, next) => {
         nextDesc,
         nextHint,
         nextPhoto,
+        JSON.stringify(nextPhotos),
         nextKind,
         nextStatus,
       ],

@@ -42,6 +42,9 @@ export async function ensureSchema(): Promise<void> {
     alter table notices add column if not exists urgency varchar(20) not null default 'normal';
     alter table notices add column if not exists audience varchar(120);
     alter table notices add column if not exists expires_at timestamptz;
+    alter table notices add column if not exists notice_sort_at timestamptz;
+    update notices set notice_sort_at = published_at where notice_sort_at is null;
+    alter table notices alter column notice_sort_at set default now();
 
     create table if not exists notice_attachments (
       id serial primary key,
@@ -527,6 +530,12 @@ export async function ensureSchema(): Promise<void> {
 
     alter table condo_lost_found add column if not exists unit_id integer references units(id) on delete set null;
     alter table condo_lost_found add column if not exists photo_url text;
+    alter table condo_lost_found add column if not exists photo_urls jsonb not null default '[]'::jsonb;
+    update condo_lost_found
+      set photo_urls = jsonb_build_array(photo_url)
+      where photo_url is not null
+        and trim(photo_url) <> ''
+        and (photo_urls is null or jsonb_array_length(photo_urls) = 0);
 
     create table if not exists condo_market_listings (
       id serial primary key,

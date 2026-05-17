@@ -567,9 +567,10 @@ router.get('/notices', async (req, res, next) => {
     if (!includeArchived) {
       sql += ` and n.is_archived = false`;
     }
-    sql += ` order by n.is_archived asc, n.is_pinned desc,
-              case when n.urgency = 'urgent' then 0 else 1 end,
-              n.published_at desc`;
+    sql += ` order by n.is_archived asc,
+              n.is_pinned desc,
+              coalesce(n.notice_sort_at, n.published_at) desc,
+              n.id desc`;
     const r = await query(sql, params);
     return res.json(r.rows);
   } catch (err) {
@@ -691,7 +692,8 @@ router.patch('/notices/:id', async (req, res, next) => {
     } = body;
 
     const existing = await query(
-      `select published_at, expires_at from notices where id = $1 and condo_id = $2`,
+      `select published_at, expires_at, is_pinned
+       from notices where id = $1 and condo_id = $2`,
       [id, condoId],
     );
     if (existing.rows.length === 0) {
@@ -750,8 +752,12 @@ router.patch('/notices/:id', async (req, res, next) => {
     }
 
     if (isPinned !== undefined) {
+      const nextPinned = Boolean(isPinned);
       sets.push(`is_pinned = $${p++}`);
-      params.push(Boolean(isPinned));
+      params.push(nextPinned);
+      if (existing.rows[0].is_pinned === true && !nextPinned) {
+        sets.push(`notice_sort_at = now()`);
+      }
     }
     if (isArchived !== undefined) {
       sets.push(`is_archived = $${p++}`);

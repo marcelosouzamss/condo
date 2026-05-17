@@ -168,8 +168,8 @@ app.get('/api/notices', async (req, res, next) => {
          and n.published_at <= now()
          and (n.expires_at is null or n.expires_at > now())
        order by n.is_pinned desc,
-                case when n.urgency = 'urgent' then 0 else 1 end,
-                n.published_at desc
+                coalesce(n.notice_sort_at, n.published_at) desc,
+                n.id desc
        limit 80`,
       [condoId, includeArchived],
     );
