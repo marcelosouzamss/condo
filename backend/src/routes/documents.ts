@@ -72,14 +72,56 @@ const DOCUMENT_VIEW_ROLES = new Set([
   'administrator',
 ]);
 
+function normalizeRoleKey(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+}
+
+function normalizeAppRole(raw: unknown): string {
+  const key = normalizeRoleKey(raw);
+  switch (key) {
+    case 'morador':
+    case 'moradores':
+    case 'residente':
+    case 'residentes':
+    case 'resident':
+      return 'resident';
+    case 'colaborador':
+    case 'colaboradores':
+    case 'collaborators':
+    case 'collaborator':
+      return 'collaborator';
+    case 'parceiro':
+    case 'parceiros':
+    case 'partners':
+    case 'partner':
+      return 'partner';
+    case 'sindico':
+    case 'sindicos':
+    case 'syndic':
+      return 'syndic';
+    case 'administracao':
+    case 'administradora':
+    case 'administradoras':
+    case 'administrador':
+    case 'administradores':
+    case 'administrator':
+      return 'administrator';
+    default:
+      return key;
+  }
+}
+
 /** Envio e exclusão: síndico, administração, colaboradores e parceiros do condomínio. */
 function canPublishDocuments(user: AppUserRow, condoId: number): boolean {
+  const role = normalizeAppRole(user.role);
   return (
     user.active === true &&
     userCondoMatches(user.condo_id, condoId) &&
-    (isBillingStaff(user.role) ||
-      user.role === 'collaborator' ||
-      user.role === 'partner')
+    (isBillingStaff(role) || role === 'collaborator' || role === 'partner')
   );
 }
 
@@ -91,7 +133,8 @@ function seesAllCondoDocuments(user: AppUserRow, condoId: number): boolean {
   if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
     return false;
   }
-  return isBillingStaff(user.role) || user.role === 'collaborator';
+  const role = normalizeAppRole(user.role);
+  return isBillingStaff(role) || role === 'collaborator';
 }
 
 /** Editar metadados: síndico ou administração; ou quem publicou o documento. */
@@ -103,7 +146,7 @@ function canEditDocument(
   if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
     return false;
   }
-  if (isBillingStaff(user.role)) {
+  if (isBillingStaff(normalizeAppRole(user.role))) {
     return true;
   }
   return (
@@ -144,7 +187,7 @@ function parseViewerRolesJson(raw: unknown): string[] | null {
   }
   const out: string[] = [];
   for (const x of parsed) {
-    const role = String(x ?? '').trim().toLowerCase();
+    const role = normalizeAppRole(x);
     if (!DOCUMENT_VIEW_ROLES.has(role) || out.includes(role)) {
       continue;
     }
@@ -213,9 +256,7 @@ router.get('/', async (req, res, next) => {
     const params: unknown[] = [condoId];
     if (!seesAllCondoDocuments(user, condoId)) {
       /** Comparação por elemento: robusto vs tipagem jsonb (parceiro, morador, etc.). */
-      const roleKey = String(user.role ?? '')
-        .trim()
-        .toLowerCase();
+      const roleKey = normalizeAppRole(user.role);
       sql += ` and (
         visible_to_all = true
         or exists (
@@ -227,7 +268,34 @@ router.get('/', async (req, res, next) => {
               else '[]'::jsonb
             end
           ) as vr(elem)
-          where lower(trim(vr.elem #>> '{}')) = $2
+          where case lower(trim(vr.elem #>> '{}'))
+            when 'morador' then 'resident'
+            when 'moradores' then 'resident'
+            when 'residente' then 'resident'
+            when 'residentes' then 'resident'
+            when 'resident' then 'resident'
+            when 'colaborador' then 'collaborator'
+            when 'colaboradores' then 'collaborator'
+            when 'collaborators' then 'collaborator'
+            when 'collaborator' then 'collaborator'
+            when 'parceiro' then 'partner'
+            when 'parceiros' then 'partner'
+            when 'partners' then 'partner'
+            when 'partner' then 'partner'
+            when 'síndico' then 'syndic'
+            when 'sindico' then 'syndic'
+            when 'síndicos' then 'syndic'
+            when 'sindicos' then 'syndic'
+            when 'syndic' then 'syndic'
+            when 'administração' then 'administrator'
+            when 'administracao' then 'administrator'
+            when 'administradora' then 'administrator'
+            when 'administradoras' then 'administrator'
+            when 'administrador' then 'administrator'
+            when 'administradores' then 'administrator'
+            when 'administrator' then 'administrator'
+            else lower(trim(vr.elem #>> '{}'))
+          end = $2
         )
       )`;
       params.push(roleKey);
