@@ -237,6 +237,13 @@ router.get('/', async (req, res, next) => {
     if (!userCondoMatches(user.condo_id, condoId)) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
+    const requestedRole = normalizeAppRole(req.query.userRole ?? req.query.role);
+    const effectiveUser: AppUserRow = {
+      ...user,
+      role: DOCUMENT_VIEW_ROLES.has(requestedRole)
+        ? requestedRole
+        : normalizeAppRole(user.role),
+    };
 
     let sql = `select id,
               condo_id,
@@ -254,9 +261,9 @@ router.get('/', async (req, res, next) => {
        from condo_documents
        where condo_id = $1`;
     const params: unknown[] = [condoId];
-    if (!seesAllCondoDocuments(user, condoId)) {
+    if (!seesAllCondoDocuments(effectiveUser, condoId)) {
       /** Comparação por elemento: robusto vs tipagem jsonb (parceiro, morador, etc.). */
-      const roleKey = normalizeAppRole(user.role);
+      const roleKey = normalizeAppRole(effectiveUser.role);
       sql += ` and (
         visible_to_all = true
         or exists (
