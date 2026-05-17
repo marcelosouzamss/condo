@@ -41,6 +41,11 @@ function parseCondoId(raw: unknown): number | null {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
+/** Compara condomínio do utilizador com o pedido (evita falhas `===` com string vs número do driver). */
+function userCondoMatches(userCondoId: unknown, requestedCondoId: number): boolean {
+  return Number(userCondoId) === Number(requestedCondoId);
+}
+
 type AppUserRow = {
   id: number;
   condo_id: number;
@@ -71,16 +76,22 @@ const DOCUMENT_VIEW_ROLES = new Set([
 function canPublishDocuments(user: AppUserRow, condoId: number): boolean {
   return (
     user.active === true &&
-    user.condo_id === condoId &&
+    userCondoMatches(user.condo_id, condoId) &&
     (isBillingStaff(user.role) ||
       user.role === 'collaborator' ||
       user.role === 'partner')
   );
 }
 
-/** Quem publica documentos vê a lista completa (sem filtro de audiência). */
+/**
+ * Lista sem filtro de audiência: só síndico, administração e colaboradores.
+ * Parceiros publicam documentos mas só veem o que é para todos ou inclui o seu perfil.
+ */
 function seesAllCondoDocuments(user: AppUserRow, condoId: number): boolean {
-  return canPublishDocuments(user, condoId);
+  if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
+    return false;
+  }
+  return isBillingStaff(user.role) || user.role === 'collaborator';
 }
 
 /** Editar metadados: síndico ou administração; ou quem publicou o documento. */
@@ -89,7 +100,7 @@ function canEditDocument(
   condoId: number,
   postedByUserId: number | null,
 ): boolean {
-  if (!user.active || user.condo_id !== condoId) {
+  if (!user.active || !userCondoMatches(user.condo_id, condoId)) {
     return false;
   }
   if (isBillingStaff(user.role)) {
@@ -180,7 +191,7 @@ router.get('/', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (user.condo_id !== condoId) {
+    if (!userCondoMatches(user.condo_id, condoId)) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
 
@@ -205,11 +216,11 @@ router.get('/', async (req, res, next) => {
         visible_to_all = true
         or exists (
           select 1
-          from jsonb_array_elements_text(viewer_roles) as t(role)
-          where t.role = $2
+          from jsonb_array_elements_text(coalesce(viewer_roles, '[]'::jsonb)) as vr(val)
+          where lower(trim(vr.val::text)) = lower(trim($2::text))
         )
       )`;
-      params.push(user.role);
+      params.push(String(user.role ?? '').trim());
     }
     sql += ` order by created_at desc limit 500`;
     const r = await query(sql, params);
@@ -443,7 +454,7 @@ const updateDocumentMetadata: RequestHandler = async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (user.condo_id !== condoId) {
+    if (!userCondoMatches(user.condo_id, condoId)) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
 
