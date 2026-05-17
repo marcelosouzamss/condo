@@ -212,15 +212,25 @@ router.get('/', async (req, res, next) => {
        where condo_id = $1`;
     const params: unknown[] = [condoId];
     if (!seesAllCondoDocuments(user, condoId)) {
+      /** Comparação por elemento: robusto vs tipagem jsonb (parceiro, morador, etc.). */
+      const roleKey = String(user.role ?? '')
+        .trim()
+        .toLowerCase();
       sql += ` and (
         visible_to_all = true
         or exists (
           select 1
-          from jsonb_array_elements_text(coalesce(viewer_roles, '[]'::jsonb)) as vr(val)
-          where lower(trim(vr.val::text)) = lower(trim($2::text))
+          from jsonb_array_elements(
+            case jsonb_typeof(coalesce(viewer_roles, '[]'::jsonb))
+              when 'array' then coalesce(viewer_roles, '[]'::jsonb)
+              when 'string' then jsonb_build_array(trim(both from (viewer_roles #>> '{}')))
+              else '[]'::jsonb
+            end
+          ) as vr(elem)
+          where lower(trim(vr.elem #>> '{}')) = $2
         )
       )`;
-      params.push(String(user.role ?? '').trim());
+      params.push(roleKey);
     }
     sql += ` order by created_at desc limit 500`;
     const r = await query(sql, params);
