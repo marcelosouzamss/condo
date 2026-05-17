@@ -348,6 +348,23 @@ export async function ensureSchema(): Promise<void> {
     alter table condo_documents alter column document_type set default 'Outros';
     alter table condo_documents alter column document_type set not null;
 
+    alter table condo_documents add column if not exists visible_to_all boolean;
+    update condo_documents set visible_to_all = true where visible_to_all is null;
+    alter table condo_documents alter column visible_to_all set default true;
+    alter table condo_documents alter column visible_to_all set not null;
+
+    alter table condo_documents add column if not exists viewer_roles jsonb;
+    update condo_documents
+    set viewer_roles = '[]'::jsonb
+    where viewer_roles is null;
+    alter table condo_documents alter column viewer_roles set default '[]'::jsonb;
+    alter table condo_documents alter column viewer_roles set not null;
+
+    alter table condo_documents
+      add column if not exists posted_by_user_id integer references app_users (id) on delete set null;
+    create index if not exists condo_documents_posted_by_user_id_idx
+      on condo_documents (posted_by_user_id);
+
     create table if not exists condo_contacts (
       id serial primary key,
       condo_id integer not null references condos(id) on delete cascade,
