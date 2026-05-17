@@ -173,6 +173,66 @@ function canManageCatalog(user: AppUserRow, condoId: number): boolean {
   );
 }
 
+async function condoExistsRow(id: number): Promise<boolean> {
+  const r = await query(`select 1 from condos where id = $1 limit 1`, [id]);
+  return r.rows.length > 0;
+}
+
+/**
+ * Parceiro pode alterar o próprio cadastro na guia de outro condomínio (anúncio multiedifício).
+ * Síndico/admin: apenas o condomínio do utilizador.
+ */
+async function canMutateServiceCatalog(
+  user: AppUserRow,
+  catalogCondoId: number,
+  createdByUserId: number,
+): Promise<boolean> {
+  if (user.role === 'syndic' || user.role === 'administrator') {
+    return canAccessCondo(user, catalogCondoId);
+  }
+  if (user.role === 'partner') {
+    if (canAccessCondo(user, catalogCondoId)) {
+      return true;
+    }
+    if (createdByUserId === user.id && (await condoExistsRow(catalogCondoId))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Leitura da guia: parceiro pode consultar qualquer condomínio existente (escolha no portal). */
+async function canAccessServiceGuideCondo(
+  user: AppUserRow,
+  condoId: number,
+): Promise<boolean> {
+  if (canAccessCondo(user, condoId)) {
+    return true;
+  }
+  if (user.role === 'partner' && (await condoExistsRow(condoId))) {
+    return true;
+  }
+  return false;
+}
+
+function parseCondoIdsBody(body: Record<string, unknown>): number[] | null {
+  const raw = body.condoIds ?? body.condo_ids;
+  if (raw == null) {
+    return null;
+  }
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  const out: number[] = [];
+  for (const x of raw) {
+    const n = Number(x);
+    if (Number.isFinite(n) && n > 0 && !out.includes(n)) {
+      out.push(n);
+    }
+  }
+  return out.length > 0 ? out : null;
+}
+
 /** Solicitações de serviço (morador): equipe operacional continua gerenciando. */
 function canManageServiceRequests(user: AppUserRow, condoId: number): boolean {
   return canAccessCondo(user, condoId) && isStaff(user);
@@ -227,17 +287,6 @@ function portfolioPhotosJsonSubquery(tableAlias: string): string {
     where ph.service_id = ${tableAlias}.id)`;
 }
 
-async function assertServiceInCondo(
-  serviceId: number,
-  condoId: number,
-): Promise<boolean> {
-  const r = await query(
-    `select id from condo_service_catalog where id = $1 and condo_id = $2`,
-    [serviceId, condoId],
-  );
-  return r.rows.length > 0;
-}
-
 function unlinkUploadMaybe(photoUrl: string): void {
   const trimmed = String(photoUrl ?? '').trim();
   if (!trimmed.startsWith('/uploads/')) {
@@ -266,7 +315,7 @@ router.get('/catalog', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canAccessCondo(user, condoId)) {
+    if (!(await canAccessServiceGuideCondo(user, condoId))) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
 
@@ -304,7 +353,12 @@ router.get('/catalog', async (req, res, next) => {
     }
 
     if (!manager) {
-      sql += ` and svc.visible = true`;
+      if (user.role === 'partner') {
+        sql += ` and (svc.visible = true or svc.created_by_user_id = $2)`;
+        params.push(user.id);
+      } else {
+        sql += ` and svc.visible = true`;
+      }
     }
 
     sql += ` order by svc.sort_order asc, svc.title asc`;
@@ -331,7 +385,7 @@ router.get('/overview', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canAccessCondo(user, condoId)) {
+    if (!(await canAccessServiceGuideCondo(user, condoId))) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
 
@@ -411,7 +465,7 @@ router.get('/catalog/:id', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canAccessCondo(user, condoId)) {
+    if (!(await canAccessServiceGuideCondo(user, condoId))) {
       return res.status(403).json({ message: 'Usuario nao pertence a este condominio.' });
     }
 
@@ -429,6 +483,7 @@ router.get('/catalog/:id', async (req, res, next) => {
               active,
               scope,
               visible,
+              created_by_user_id,
               created_at,
               updated_at,
               ${portfolioPhotosJsonSubquery('condo_service_catalog')} as portfolio_photos
@@ -439,9 +494,15 @@ router.get('/catalog/:id', async (req, res, next) => {
     if (r.rows.length === 0) {
       return res.status(404).json({ message: 'Servico nao encontrado.' });
     }
-    const row = r.rows[0] as { active: boolean; visible: boolean };
+    const row = r.rows[0] as {
+      active: boolean;
+      visible: boolean;
+      created_by_user_id: number;
+    };
     if (!canManageCatalog(user, condoId)) {
-      if (!row.active || !row.visible) {
+      const partnerOwn =
+        user.role === 'partner' && row.created_by_user_id === user.id;
+      if (!partnerOwn && (!row.active || !row.visible)) {
         return res.status(404).json({ message: 'Servico nao encontrado.' });
       }
     }
@@ -455,7 +516,7 @@ router.get('/catalog/:id', async (req, res, next) => {
 
 router.post('/catalog', async (req, res, next) => {
   try {
-    const body = req.body || {};
+    const body = req.body as Record<string, unknown>;
     const condoIdBody = body.condoId;
     const condoId =
       condoIdBody !== undefined &&
@@ -484,9 +545,6 @@ router.post('/catalog', async (req, res, next) => {
         ? Number(sortOrderRaw)
         : 0;
 
-    if (!Number.isFinite(condoId) || condoId < 1) {
-      return res.status(400).json({ message: 'condoId invalido.' });
-    }
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
@@ -501,11 +559,33 @@ router.post('/catalog', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canManageCatalog(user, condoId)) {
-      return res.status(403).json({
-        message:
-          'Apenas sindico, administracao ou parceiros podem cadastrar servicos na guia.',
+
+    const partnerTargets = parseCondoIdsBody(body);
+    if (partnerTargets != null && user.role !== 'partner') {
+      return res.status(400).json({
+        message: 'condoIds so e permitido ao cadastrar como parceiro.',
       });
+    }
+
+    let targetCondoIds: number[];
+    if (partnerTargets != null) {
+      targetCondoIds = partnerTargets;
+      for (const cid of targetCondoIds) {
+        if (!(await condoExistsRow(cid))) {
+          return res.status(400).json({ message: `condominio ${cid} invalido.` });
+        }
+      }
+    } else {
+      if (!Number.isFinite(condoId) || condoId < 1) {
+        return res.status(400).json({ message: 'condoId invalido.' });
+      }
+      if (!canManageCatalog(user, condoId)) {
+        return res.status(403).json({
+          message:
+            'Apenas sindico, administracao ou parceiros podem cadastrar servicos na guia.',
+        });
+      }
+      targetCondoIds = [condoId];
     }
 
     const scope = parseCatalogScope(body.scope);
@@ -516,8 +596,7 @@ router.post('/catalog', async (req, res, next) => {
     }
     const visible = parseVisible(body.visible ?? body.visivel, true);
 
-    const ins = await query(
-      `insert into condo_service_catalog (
+    const insertSql = `insert into condo_service_catalog (
          condo_id, title, description, category,
          provider_name, provider_phone, provider_email, provider_whatsapp,
          sort_order, scope, visible, created_by_user_id
@@ -538,27 +617,39 @@ router.post('/catalog', async (req, res, next) => {
                  visible,
                  created_by_user_id,
                  created_at,
-                 updated_at`,
-      [
-        condoId,
-        title,
-        description,
-        category,
-        providerName,
-        providerPhone,
-        providerEmail,
-        providerWhatsapp,
-        sortOrder,
-        scope,
-        visible,
-        userId,
-      ],
-    );
+                 updated_at`;
 
-    const rowOut = ins.rows[0] as Record<string, unknown>;
+    const baseParams = [
+      title,
+      description,
+      category,
+      providerName,
+      providerPhone,
+      providerEmail,
+      providerWhatsapp,
+      sortOrder,
+      scope,
+      visible,
+      userId,
+    ];
+
+    const createdRows: Record<string, unknown>[] = [];
+    for (const cid of targetCondoIds) {
+      const ins = await query(insertSql, [cid, ...baseParams]);
+      createdRows.push(
+        normalizeCatalogRow(ins.rows[0] as Record<string, unknown>),
+      );
+    }
+
+    if (createdRows.length === 1) {
+      const rowOut = createdRows[0];
+      return res.status(201).json({
+        ...rowOut,
+        portfolio_photos: [],
+      });
+    }
     return res.status(201).json({
-      ...rowOut,
-      portfolio_photos: [],
+      catalog: createdRows.map((row) => ({ ...row, portfolio_photos: [] })),
     });
   } catch (err) {
     return next(err);
@@ -592,19 +683,21 @@ router.patch('/catalog/:id', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canManageCatalog(user, condoId)) {
-      return res.status(403).json({
-        message:
-          'Apenas sindico, administracao ou parceiros podem alterar o catalogo.',
-      });
-    }
 
     const ex = await query(
-      `select id from condo_service_catalog where id = $1 and condo_id = $2`,
+      `select id, created_by_user_id from condo_service_catalog where id = $1 and condo_id = $2`,
       [id, condoId],
     );
     if (ex.rows.length === 0) {
       return res.status(404).json({ message: 'Servico nao encontrado.' });
+    }
+    const createdBy = (ex.rows[0] as { created_by_user_id: number })
+      .created_by_user_id;
+    if (!(await canMutateServiceCatalog(user, condoId, createdBy))) {
+      return res.status(403).json({
+        message:
+          'Apenas sindico, administracao ou parceiros podem alterar o catalogo.',
+      });
     }
 
     const cur = await query(
@@ -842,7 +935,35 @@ router.post(
         }
         return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
       }
-      if (!canManageCatalog(user, condoId)) {
+      const svcMeta = await query(
+        `select condo_id, created_by_user_id from condo_service_catalog where id = $1 limit 1`,
+        [serviceId],
+      );
+      if (svcMeta.rows.length === 0) {
+        if (file) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch {
+            /* empty */
+          }
+        }
+        return res.status(404).json({ message: 'Servico nao encontrado.' });
+      }
+      const sm = svcMeta.rows[0] as {
+        condo_id: number;
+        created_by_user_id: number;
+      };
+      if (sm.condo_id !== condoId) {
+        if (file) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch {
+            /* empty */
+          }
+        }
+        return res.status(404).json({ message: 'Servico nao encontrado.' });
+      }
+      if (!(await canMutateServiceCatalog(user, condoId, sm.created_by_user_id))) {
         if (file) {
           try {
             fs.unlinkSync(file.path);
@@ -853,17 +974,6 @@ router.post(
         return res.status(403).json({
           message: 'Sem permissao para anexar fotos ao servico.',
         });
-      }
-
-      if (!(await assertServiceInCondo(serviceId, condoId))) {
-        if (file) {
-          try {
-            fs.unlinkSync(file.path);
-          } catch {
-            /* empty */
-          }
-        }
-        return res.status(404).json({ message: 'Servico nao encontrado.' });
       }
 
       if (!file) {
@@ -934,12 +1044,9 @@ router.delete(
       if (user == null || user.active !== true) {
         return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
       }
-      if (!canManageCatalog(user, condoId)) {
-        return res.status(403).json({ message: 'Sem permissao.' });
-      }
 
       const picRow = await query(
-        `select p.id, p.photo_url
+        `select p.id, p.photo_url, s.created_by_user_id
          from condo_service_catalog_photos p
          join condo_service_catalog s on s.id = p.service_id
          where p.id = $1 and p.service_id = $2 and s.condo_id = $3`,
@@ -948,7 +1055,14 @@ router.delete(
       if (picRow.rows.length === 0) {
         return res.status(404).json({ message: 'Foto nao encontrada.' });
       }
-      const photoUrl = (picRow.rows[0] as { photo_url: string }).photo_url;
+      const pr = picRow.rows[0] as {
+        photo_url: string;
+        created_by_user_id: number;
+      };
+      if (!(await canMutateServiceCatalog(user, condoId, pr.created_by_user_id))) {
+        return res.status(403).json({ message: 'Sem permissao.' });
+      }
+      const photoUrl = pr.photo_url;
 
       await query(`delete from condo_service_catalog_photos where id = $1`, [
         photoId,
@@ -984,7 +1098,16 @@ router.delete('/catalog/:id', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
-    if (!canManageCatalog(user, condoId)) {
+
+    const ownerCheck = await query(
+      `select id, created_by_user_id from condo_service_catalog where id = $1 and condo_id = $2`,
+      [id, condoId],
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Servico nao encontrado.' });
+    }
+    const oc = ownerCheck.rows[0] as { created_by_user_id: number };
+    if (!(await canMutateServiceCatalog(user, condoId, oc.created_by_user_id))) {
       return res.status(403).json({
         message:
           'Apenas sindico, administracao ou parceiros podem excluir servicos.',
