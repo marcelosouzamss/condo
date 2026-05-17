@@ -330,6 +330,13 @@ router.get('/', async (req, res, next) => {
     }
 
     const onlyOpen = req.query.onlyOpen !== 'false';
+    const history = req.query.history === 'true';
+
+    if (history && statusFilter != null) {
+      return res.status(400).json({
+        message: 'Nao use status na query com history=true.',
+      });
+    }
 
     let sql = `select lf.id,
                       lf.condo_id,
@@ -356,20 +363,35 @@ router.get('/', async (req, res, next) => {
     const params: unknown[] = [condoId];
     let p = 2;
 
-    if (kindFilter != null) {
-      sql += ` and lf.kind = $${p}`;
-      params.push(kindFilter);
-      p += 1;
+    if (history) {
+      if (kindFilter != null && kindFilter !== 'lost') {
+        return res.status(400).json({
+          message: 'history so lista itens perdidos já resolvidos (kind=lost).',
+        });
+      }
+      sql += ` and lf.kind = 'lost'`;
+      sql += ` and lf.status = 'resolved'`;
+      if (!isBillingStaff(user.role)) {
+        sql += ` and lf.created_by_user_id = $${p}`;
+        params.push(user.id);
+        p += 1;
+      }
+      sql += ` order by coalesce(lf.updated_at, lf.created_at) desc, lf.id desc`;
+    } else {
+      if (kindFilter != null) {
+        sql += ` and lf.kind = $${p}`;
+        params.push(kindFilter);
+        p += 1;
+      }
+      if (statusFilter != null) {
+        sql += ` and lf.status = $${p}`;
+        params.push(statusFilter);
+        p += 1;
+      } else if (onlyOpen) {
+        sql += ` and lf.status = 'open'`;
+      }
+      sql += ` order by lf.created_at desc`;
     }
-    if (statusFilter != null) {
-      sql += ` and lf.status = $${p}`;
-      params.push(statusFilter);
-      p += 1;
-    } else if (onlyOpen) {
-      sql += ` and lf.status = 'open'`;
-    }
-
-    sql += ` order by lf.created_at desc`;
 
     const r = await query(sql, params);
     return res.json(r.rows);
