@@ -1185,7 +1185,7 @@ router.delete('/registry-documents/:id', async (req, res, next) => {
   }
 });
 
-const APP_ROLE_LIST = ['syndic', 'administrator', 'resident', 'partner', 'collaborator'] as const;
+const APP_ROLE_LIST = ['syndic', 'administrator', 'resident', 'partner', 'collaborator', 'doorman'] as const;
 
 router.get('/app-users', async (req, res, next) => {
   try {

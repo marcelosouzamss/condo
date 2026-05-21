@@ -27,7 +27,11 @@ const petPhotoUpload = multer({
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const ok =
+      /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype) ||
+      (file.mimetype === 'application/octet-stream' &&
+        ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext));
     cb(null, ok);
   },
 });

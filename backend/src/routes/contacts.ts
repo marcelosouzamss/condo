@@ -49,7 +49,8 @@ function contactVisibleToViewer(viewerRole: string, visibleTo: string): boolean 
     return (
       viewerRole === 'syndic' ||
       viewerRole === 'administrator' ||
-      viewerRole === 'collaborator'
+      viewerRole === 'collaborator' ||
+      viewerRole === 'doorman'
     );
   }
   if (v === 'syndic_administration') {

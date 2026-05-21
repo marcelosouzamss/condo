@@ -82,7 +82,7 @@ async function validateCollaboratorUsers(
      from app_users
      where condo_id = $1
        and active = true
-       and role = 'collaborator'
+       and role in ('collaborator', 'doorman')
        and id = any($2::int[])
      order by full_name asc`,
     [condoId, memberUserIds],
@@ -147,7 +147,7 @@ router.get('/collaborators', async (req, res, next) => {
        from app_users
        where condo_id = $1
          and active = true
-         and role = 'collaborator'
+         and role in ('collaborator', 'doorman')
        order by full_name asc`,
       [condoId],
     );

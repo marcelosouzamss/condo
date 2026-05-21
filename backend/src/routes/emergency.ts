@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { isBillingStaff } from '../authz';
+import { isOperationalStaff } from '../authz';
 import { query } from '../db';
 
 const router = Router();
@@ -82,6 +82,7 @@ router.get('/', async (req, res, next) => {
                       e.reporter_user_id,
                       e.incident_kind,
                       e.description,
+                      e.action_taken,
                       e.status,
                       e.created_at,
                       e.updated_at,
@@ -94,7 +95,7 @@ router.get('/', async (req, res, next) => {
                where e.condo_id = $1`;
     const params: unknown[] = [condoId];
 
-    if (!isBillingStaff(user.role)) {
+    if (!isOperationalStaff(user.role)) {
       if (user.role !== 'resident') {
         return res.status(403).json({
           message: 'Somente moradores ou equipe podem consultar ocorrências.',
@@ -176,6 +177,7 @@ router.post('/', async (req, res, next) => {
                  reporter_user_id,
                  incident_kind,
                  description,
+                 action_taken,
                  status,
                  created_at,
                  updated_at`,
@@ -194,6 +196,10 @@ router.patch('/:id', async (req, res, next) => {
     const body = req.body || {};
     const userId = parsePositive(body.userId);
     const status = String(body.status ?? '').trim();
+    const actionTakenRaw =
+      body.actionTaken !== undefined || body.action_taken !== undefined
+        ? String(body.actionTaken ?? body.action_taken ?? '').trim()
+        : undefined;
 
     if (id == null) {
       return res.status(400).json({ message: 'id invalido.' });
@@ -206,14 +212,19 @@ router.patch('/:id', async (req, res, next) => {
         message: 'status deve ser open, acknowledged ou closed.',
       });
     }
+    if (status === 'closed' && !actionTakenRaw) {
+      return res.status(400).json({
+        message: 'Informe a ação tomada para encerrar o chamado.',
+      });
+    }
 
     const user = await loadUser(userId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
-    if (!isBillingStaff(user.role)) {
+    if (!isOperationalStaff(user.role)) {
       return res.status(403).json({
-        message: 'Somente síndico ou administração pode atualizar status.',
+        message: 'Somente sindico, administracao, colaborador ou portaria pode atualizar status.',
       });
     }
 
@@ -231,7 +242,12 @@ router.patch('/:id', async (req, res, next) => {
 
     const r = await query(
       `update condo_emergency_incidents
-       set status = $2, updated_at = now()
+       set status = $2,
+           action_taken = case
+             when $2 = 'closed' then $3
+             else action_taken
+           end,
+           updated_at = now()
        where id = $1
        returning id,
                  condo_id,
@@ -239,10 +255,11 @@ router.patch('/:id', async (req, res, next) => {
                  reporter_user_id,
                  incident_kind,
                  description,
+                 action_taken,
                  status,
                  created_at,
                  updated_at`,
-      [id, status],
+      [id, status, actionTakenRaw ?? null],
     );
 
     return res.json(r.rows[0]);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { isBillingStaff } from '../authz';
+import { isOperationalStaff } from '../authz';
 import { query } from '../db';
 
 const router = Router();
@@ -81,7 +81,7 @@ router.get('/', async (req, res, next) => {
                where p.condo_id = $1`;
     const params: unknown[] = [condoId];
 
-    if (isBillingStaff(user.role)) {
+    if (isOperationalStaff(user.role)) {
       const onlyPending = req.query.onlyPending === 'true';
       if (onlyPending) {
         sql += ` and p.status = 'awaiting_pickup'`;
@@ -137,9 +137,9 @@ router.post('/', async (req, res, next) => {
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
-    if (!isBillingStaff(user.role)) {
+    if (!isOperationalStaff(user.role)) {
       return res.status(403).json({
-        message: 'Somente síndico ou administração registra encomendas.',
+        message: 'Somente sindico, administracao, colaborador ou portaria registra encomendas.',
       });
     }
     if (user.condo_id !== condoId) {

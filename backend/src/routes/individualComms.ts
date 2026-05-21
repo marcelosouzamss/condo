@@ -20,12 +20,12 @@ function parseUnitId(raw: unknown): number | null {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-const STAFF_ROLES = ['syndic', 'administrator', 'collaborator'] as const;
+const STAFF_ROLES = ['syndic', 'administrator', 'collaborator', 'doorman'] as const;
 type StaffRole = (typeof STAFF_ROLES)[number];
 
 function parseStaffRole(raw: unknown): StaffRole | null {
   const s = String(raw ?? '').trim();
-  if (s === 'syndic' || s === 'administrator' || s === 'collaborator') {
+  if (s === 'syndic' || s === 'administrator' || s === 'collaborator' || s === 'doorman') {
     return s;
   }
   return null;
@@ -85,7 +85,7 @@ router.post('/', async (req, res, next) => {
     if (hasResident === hasStaff) {
       return res.status(400).json({
         message:
-          'Informe fromUnitId (morador) OU fromStaffRole (syndic, administrator ou collaborator), nao ambos.',
+          'Informe fromUnitId (morador) OU fromStaffRole (syndic, administrator, collaborator ou doorman), nao ambos.',
       });
     }
 
@@ -217,7 +217,7 @@ router.get('/staff-sent', async (req, res, next) => {
     if (condoId == null || role == null) {
       return res.status(400).json({
         message:
-          'condoId e role (syndic, administrator ou collaborator) sao obrigatorios.',
+          'condoId e role (syndic, administrator, collaborator ou doorman) sao obrigatorios.',
       });
     }
 

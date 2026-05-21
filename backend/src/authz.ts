@@ -5,7 +5,8 @@ export type AppUserRole =
   | 'administrator'
   | 'resident'
   | 'partner'
-  | 'collaborator';
+  | 'collaborator'
+  | 'doorman';
 
 export function isPlatformAdmin(role: string): boolean {
   return role === 'admin';
@@ -18,7 +19,10 @@ export function isBillingStaff(role: string): boolean {
 /** Equipe operacional (exceto financeiro completo de cobranças). */
 export function isOperationalStaff(role: string): boolean {
   return (
-    role === 'syndic' || role === 'administrator' || role === 'collaborator'
+    role === 'syndic' ||
+    role === 'administrator' ||
+    role === 'collaborator' ||
+    role === 'doorman'
   );
 }
 
@@ -32,7 +36,8 @@ export function canViewCollaboratorSchedule(role: string): boolean {
   return (
     role === 'syndic' ||
     role === 'administrator' ||
-    role === 'collaborator'
+    role === 'collaborator' ||
+    role === 'doorman'
   );
 }
 
@@ -41,7 +46,8 @@ export function canViewShiftHandovers(role: string): boolean {
   return (
     role === 'syndic' ||
     role === 'administrator' ||
-    role === 'collaborator'
+    role === 'collaborator' ||
+    role === 'doorman'
   );
 }
 

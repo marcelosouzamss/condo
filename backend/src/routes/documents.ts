@@ -67,6 +67,7 @@ async function loadUser(userId: number): Promise<AppUserRow | null> {
 const DOCUMENT_VIEW_ROLES = new Set([
   'resident',
   'collaborator',
+  'doorman',
   'partner',
   'syndic',
   'administrator',
@@ -94,6 +95,12 @@ function normalizeAppRole(raw: unknown): string {
     case 'collaborators':
     case 'collaborator':
       return 'collaborator';
+    case 'portaria':
+    case 'porteiro':
+    case 'porteiros':
+    case 'doormen':
+    case 'doorman':
+      return 'doorman';
     case 'parceiro':
     case 'parceiros':
     case 'partners':
@@ -126,18 +133,21 @@ function canAccessDocumentsCondo(user: AppUserRow, condoId: number): boolean {
   return role === 'administrator' || role === 'partner';
 }
 
-/** Envio e exclusão: síndico, administração, colaboradores e parceiros do condomínio. */
+/** Envio e exclusão: síndico, administração, colaboradores, portaria e parceiros do condomínio. */
 function canPublishDocuments(user: AppUserRow, condoId: number): boolean {
   const role = normalizeAppRole(user.role);
   return (
     user.active === true &&
     canAccessDocumentsCondo(user, condoId) &&
-    (isBillingStaff(role) || role === 'collaborator' || role === 'partner')
+    (isBillingStaff(role) ||
+      role === 'collaborator' ||
+      role === 'doorman' ||
+      role === 'partner')
   );
 }
 
 /**
- * Lista sem filtro de audiência: só síndico, administração e colaboradores.
+ * Lista sem filtro de audiência: só síndico, administração, colaboradores e portaria.
  * Parceiros publicam documentos mas só veem o que é para todos ou inclui o seu perfil.
  */
 function seesAllCondoDocuments(user: AppUserRow, condoId: number): boolean {
@@ -145,7 +155,7 @@ function seesAllCondoDocuments(user: AppUserRow, condoId: number): boolean {
     return false;
   }
   const role = normalizeAppRole(user.role);
-  return isBillingStaff(role) || role === 'collaborator';
+  return isBillingStaff(role) || role === 'collaborator' || role === 'doorman';
 }
 
 /** Editar metadados: síndico ou administração; ou quem publicou o documento. */
@@ -296,6 +306,11 @@ router.get('/', async (req, res, next) => {
             when 'colaboradores' then 'collaborator'
             when 'collaborators' then 'collaborator'
             when 'collaborator' then 'collaborator'
+            when 'portaria' then 'doorman'
+            when 'porteiro' then 'doorman'
+            when 'porteiros' then 'doorman'
+            when 'doormen' then 'doorman'
+            when 'doorman' then 'doorman'
             when 'parceiro' then 'partner'
             when 'parceiros' then 'partner'
             when 'partners' then 'partner'
@@ -368,7 +383,7 @@ router.post(
         }
         return res.status(403).json({
           message:
-            'Somente sindico, administracao, colaboradores e parceiros podem enviar documentos.',
+            'Somente sindico, administracao, colaboradores, portaria e parceiros podem enviar documentos.',
         });
       }
 
@@ -415,7 +430,7 @@ router.post(
         }
         return res.status(400).json({
           message:
-            'viewerRoles invalido: envie um JSON array de perfis (resident, collaborator, partner, syndic, administrator).',
+            'viewerRoles invalido: envie um JSON array de perfis (resident, collaborator, doorman, partner, syndic, administrator).',
         });
       }
       if (!visibleToAll && viewerRolesParsed.length === 0) {
@@ -499,7 +514,7 @@ router.delete('/:id', async (req, res, next) => {
     if (user == null || !canPublishDocuments(user, condoId)) {
       return res.status(403).json({
         message:
-          'Somente sindico, administracao, colaboradores e parceiros podem excluir documentos.',
+          'Somente sindico, administracao, colaboradores, portaria e parceiros podem excluir documentos.',
       });
     }
 
@@ -615,7 +630,7 @@ const updateDocumentMetadata: RequestHandler = async (req, res, next) => {
     if (viewerRolesParsed == null) {
       return res.status(400).json({
         message:
-          'viewerRoles invalido: envie um JSON array de perfis (resident, collaborator, partner, syndic, administrator).',
+          'viewerRoles invalido: envie um JSON array de perfis (resident, collaborator, doorman, partner, syndic, administrator).',
       });
     }
     if (!visibleToAll && viewerRolesParsed.length === 0) {

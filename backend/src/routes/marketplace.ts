@@ -232,7 +232,7 @@ function mayEditListing(user: AppUserRow, row: ListingAuthRow): boolean {
   if (user.role === 'partner') {
     return row.listing_scope === 'condominium';
   }
-  if (user.role === 'collaborator') {
+  if (user.role === 'collaborator' || user.role === 'doorman') {
     return true;
   }
   return false;
@@ -266,13 +266,22 @@ function mayDeleteListing(user: AppUserRow, row: ListingAuthRow): boolean {
   if (user.role === 'partner') {
     return row.listing_scope === 'condominium';
   }
-  if (user.role === 'collaborator') {
+  if (user.role === 'collaborator' || user.role === 'doorman') {
     return true;
   }
   return false;
 }
 
-const listingSelectCols = `m.id,
+function listingSelectCols(viewerUserSql: string | null = null): string {
+  const viewerInterested = viewerUserSql == null
+    ? `false`
+    : `exists (
+        select 1
+        from condo_market_listing_interests mi_viewer
+        where mi_viewer.listing_id = m.id
+          and mi_viewer.user_id = ${viewerUserSql}::integer
+      )`;
+  return `m.id,
                       m.condo_id,
                       m.title,
                       m.description,
@@ -286,11 +295,19 @@ const listingSelectCols = `m.id,
                       m.listing_scope,
                       m.status,
                       m.created_by_user_id,
+                      m.expires_at,
                       m.created_at,
                       m.updated_at,
                       u.full_name as created_by_name,
                       u.role as created_by_role,
+                      (
+                        select count(*)::int
+                        from condo_market_listing_interests mi_count
+                        where mi_count.listing_id = m.id
+                      ) as interest_count,
+                      ${viewerInterested} as viewer_interested,
                       ${listingPhotosJsonSubquery('m')} as portfolio_photos`;
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -334,20 +351,35 @@ router.get('/', async (req, res, next) => {
     }
 
     const onlyActive = req.query.onlyActive !== 'false';
+    const includeExpired = req.query.includeExpired === 'true';
+    const viewerUserId = parsePositive(req.query.userId);
 
-    let sql = `select ${listingSelectCols}
+    const params: unknown[] = [condoId];
+    let p = 2;
+    let viewerUserSql: string | null = null;
+    if (viewerUserId != null) {
+      viewerUserSql = `$${p}`;
+      params.push(viewerUserId);
+      p += 1;
+    }
+
+    let sql = `select ${listingSelectCols(viewerUserSql)}
                from condo_market_listings m
                join app_users u on u.id = m.created_by_user_id
                where m.condo_id = $1`;
-    const params: unknown[] = [condoId];
-    let p = 2;
 
     if (statusFilter != null) {
       sql += ` and m.status = $${p}`;
       params.push(statusFilter);
       p += 1;
+      if (statusFilter === 'active' && !includeExpired) {
+        sql += ` and m.expires_at > now()`;
+      }
     } else if (onlyActive) {
       sql += ` and m.status = 'active'`;
+      if (!includeExpired) {
+        sql += ` and m.expires_at > now()`;
+      }
     }
 
     if (categoryFilter != null) {
@@ -458,6 +490,7 @@ router.post('/', async (req, res, next) => {
                  listing_scope,
                  status,
                  created_by_user_id,
+                 expires_at,
                  created_at,
                  updated_at`,
       [
@@ -764,16 +797,23 @@ router.get('/:id', async (req, res, next) => {
   try {
     const id = parsePositive(req.params.id);
     const condoId = parseCondoIdQuery(req.query.condoId);
+    const viewerUserId = parsePositive(req.query.userId);
     if (id == null) {
       return res.status(400).json({ message: 'id invalido.' });
     }
 
+    const params: unknown[] = [id, condoId];
+    let viewerUserSql: string | null = null;
+    if (viewerUserId != null) {
+      viewerUserSql = '$3';
+      params.push(viewerUserId);
+    }
     const r = await query(
-      `select ${listingSelectCols}
+      `select ${listingSelectCols(viewerUserSql)}
        from condo_market_listings m
        join app_users u on u.id = m.created_by_user_id
        where m.id = $1 and m.condo_id = $2`,
-      [id, condoId],
+      params,
     );
     if (r.rows.length === 0) {
       return res.status(404).json({ message: 'Anuncio nao encontrado.' });
@@ -970,6 +1010,7 @@ router.patch('/:id', async (req, res, next) => {
                  listing_scope,
                  status,
                  created_by_user_id,
+                 expires_at,
                  created_at,
                  updated_at`,
       [
@@ -1009,6 +1050,96 @@ router.patch('/:id', async (req, res, next) => {
     return res.json({
       ...updatedRow,
       portfolio_photos: portfolioPhotos,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:id/interest', async (req, res, next) => {
+  try {
+    const id = parsePositive(req.params.id);
+    const body = req.body || {};
+    const condoId = Number(body.condoId ?? body.condo_id ?? req.query.condoId);
+    const userId = parsePositive(body.userId ?? body.user_id ?? req.query.userId);
+    if (id == null) {
+      return res.status(400).json({ message: 'id invalido.' });
+    }
+    if (!Number.isFinite(condoId) || condoId < 1) {
+      return res.status(400).json({ message: 'condoId invalido.' });
+    }
+    if (userId == null) {
+      return res.status(400).json({ message: 'userId e obrigatorio.' });
+    }
+    const user = await loadUser(userId);
+    if (user == null || user.active !== true || user.condo_id !== condoId) {
+      return res.status(403).json({ message: 'Sem permissao para demonstrar interesse.' });
+    }
+    const listing = await query(
+      `select id
+       from condo_market_listings
+       where id = $1
+         and condo_id = $2
+         and status = 'active'
+         and expires_at > now()`,
+      [id, condoId],
+    );
+    if (listing.rows.length === 0) {
+      return res.status(404).json({ message: 'Anuncio ativo nao encontrado.' });
+    }
+    await query(
+      `insert into condo_market_listing_interests (listing_id, user_id)
+       values ($1, $2)
+       on conflict (listing_id, user_id) do nothing`,
+      [id, userId],
+    );
+    const count = await query(
+      `select count(*)::int as c
+       from condo_market_listing_interests
+       where listing_id = $1`,
+      [id],
+    );
+    return res.status(201).json({
+      interested: true,
+      interest_count: (count.rows[0] as { c: number }).c,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.delete('/:id/interest', async (req, res, next) => {
+  try {
+    const id = parsePositive(req.params.id);
+    const condoId = Number(req.query.condoId ?? req.query.condo_id);
+    const userId = parsePositive(req.query.userId ?? req.query.user_id);
+    if (id == null) {
+      return res.status(400).json({ message: 'id invalido.' });
+    }
+    if (!Number.isFinite(condoId) || condoId < 1) {
+      return res.status(400).json({ message: 'condoId invalido.' });
+    }
+    if (userId == null) {
+      return res.status(400).json({ message: 'userId e obrigatorio.' });
+    }
+    const user = await loadUser(userId);
+    if (user == null || user.active !== true || user.condo_id !== condoId) {
+      return res.status(403).json({ message: 'Sem permissao para remover interesse.' });
+    }
+    await query(
+      `delete from condo_market_listing_interests
+       where listing_id = $1 and user_id = $2`,
+      [id, userId],
+    );
+    const count = await query(
+      `select count(*)::int as c
+       from condo_market_listing_interests
+       where listing_id = $1`,
+      [id],
+    );
+    return res.json({
+      interested: false,
+      interest_count: (count.rows[0] as { c: number }).c,
     });
   } catch (err) {
     return next(err);

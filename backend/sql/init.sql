@@ -183,6 +183,9 @@ create table if not exists reservation_spaces (
   created_at timestamptz not null default now()
 );
 
+alter table reservation_spaces
+  add column if not exists photo_urls jsonb not null default '[]'::jsonb;
+
 create unique index if not exists reservation_spaces_condo_name_idx
   on reservation_spaces (condo_id, lower(name));
 

@@ -70,6 +70,7 @@ const NOTICE_AUDIENCE_ROLES = new Set([
   'resident',
   'partner',
   'collaborator',
+  'doorman',
 ]);
 
 const OCCURRENCE_STATUSES = ['open', 'in_progress', 'closed'] as const;

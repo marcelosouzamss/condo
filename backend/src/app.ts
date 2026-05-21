@@ -49,7 +49,8 @@ app.use((req, res, next) => {
   const pathOnly = (req.originalUrl ?? req.url ?? '').split('?')[0];
   const bigJson =
     req.method === 'POST' &&
-    /^\/api\/marketplace\/listings\/\d+\/upload-photo-json$/.test(pathOnly);
+    (/^\/api\/marketplace\/listings\/\d+\/upload-photo-json$/.test(pathOnly) ||
+      pathOnly === '/api/reservation-spaces/upload-photo-json');
   (bigJson ? express.json({ limit: '12mb' }) : express.json())(req, res, next);
 });
 
@@ -118,6 +119,7 @@ const NOTICE_AUDIENCE_ROLES = new Set([
   'resident',
   'partner',
   'collaborator',
+  'doorman',
 ]);
 
 function parseNoticeAudienceRoles(raw: unknown): string[] {

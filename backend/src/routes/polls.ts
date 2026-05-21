@@ -14,6 +14,7 @@ type PollStatus = (typeof POLL_STATUSES)[number];
 const POLL_ELIGIBLE_APP_ROLES = [
   'resident',
   'collaborator',
+  'doorman',
   'partner',
   'syndic',
   'administrator',
@@ -434,7 +435,7 @@ router.post('/', async (req, res, next) => {
       if (parsed == null) {
         return res.status(400).json({
           message:
-            'eligibleRoles deve ser um array com pelo menos um perfil: resident, collaborator, partner, syndic, administrator.',
+            'eligibleRoles deve ser um array com pelo menos um perfil: resident, collaborator, doorman, partner, syndic, administrator.',
         });
       }
       eligibleRoles = parsed;
@@ -606,7 +607,7 @@ router.patch('/:id', async (req, res, next) => {
       if (parsed == null) {
         return res.status(400).json({
           message:
-            'eligibleRoles invalido: use array de resident, collaborator, partner, syndic, administrator.',
+            'eligibleRoles invalido: use array de resident, collaborator, doorman, partner, syndic, administrator.',
         });
       }
       nextEligible = parsed;

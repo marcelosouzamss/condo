@@ -83,7 +83,7 @@ export async function ensureSchema(): Promise<void> {
       login varchar(80) not null unique,
       password_plain varchar(120) not null,
       role varchar(30) not null
-        check (role in ('syndic', 'administrator', 'resident', 'partner', 'collaborator')),
+        check (role in ('syndic', 'administrator', 'resident', 'partner', 'collaborator', 'doorman')),
       active boolean not null default true,
       created_at timestamptz not null default now()
     );
@@ -203,6 +203,9 @@ export async function ensureSchema(): Promise<void> {
     create unique index if not exists reservation_spaces_condo_name_idx
       on reservation_spaces (condo_id, lower(name));
 
+    alter table reservation_spaces
+      add column if not exists photo_urls jsonb not null default '[]'::jsonb;
+
     create table if not exists registration_requests (
       id serial primary key,
       condo_id integer not null references condos(id) on delete cascade,
@@ -259,7 +262,7 @@ export async function ensureSchema(): Promise<void> {
       condo_id integer not null references condos(id) on delete cascade,
       unit_id integer not null references units(id) on delete cascade,
       channel varchar(30) not null
-        check (channel in ('syndic', 'administration')),
+        check (channel in ('syndic', 'administration', 'doorman', 'collaborator')),
       last_message_at timestamptz,
       created_at timestamptz not null default now(),
       unique (condo_id, unit_id, channel)
@@ -305,7 +308,7 @@ export async function ensureSchema(): Promise<void> {
       to_unit_id integer not null references units(id) on delete cascade,
       from_unit_id integer references units(id) on delete set null,
       from_staff_role varchar(30)
-        check (from_staff_role is null or from_staff_role in ('syndic', 'administrator', 'collaborator')),
+        check (from_staff_role is null or from_staff_role in ('syndic', 'administrator', 'collaborator', 'doorman')),
       subject varchar(150) not null,
       body text not null,
       read_at timestamptz,
@@ -445,6 +448,7 @@ export async function ensureSchema(): Promise<void> {
       reporter_user_id integer not null references app_users(id) on delete restrict,
       incident_kind varchar(40) not null,
       description text,
+      action_taken text,
       status varchar(20) not null default 'open',
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
@@ -452,6 +456,8 @@ export async function ensureSchema(): Promise<void> {
 
     create index if not exists condo_emergency_incidents_condo_idx
       on condo_emergency_incidents (condo_id, created_at desc);
+
+    alter table condo_emergency_incidents add column if not exists action_taken text;
 
     create table if not exists condo_parcel_deliveries (
       id serial primary key,
@@ -566,6 +572,7 @@ export async function ensureSchema(): Promise<void> {
       status varchar(20) not null default 'active'
         check (status in ('active', 'closed')),
       created_by_user_id integer not null references app_users(id) on delete restrict,
+      expires_at timestamptz not null default (now() + interval '30 days'),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
@@ -584,6 +591,12 @@ export async function ensureSchema(): Promise<void> {
     alter table condo_market_listings add column if not exists contact_phone varchar(80);
     alter table condo_market_listings add column if not exists contact_email varchar(150);
     alter table condo_market_listings add column if not exists contact_whatsapp varchar(80);
+    alter table condo_market_listings add column if not exists expires_at timestamptz;
+    update condo_market_listings
+    set expires_at = created_at + interval '30 days'
+    where expires_at is null;
+    alter table condo_market_listings alter column expires_at set default (now() + interval '30 days');
+    alter table condo_market_listings alter column expires_at set not null;
 
     create table if not exists condo_market_listing_photos (
       id serial primary key,
@@ -595,6 +608,19 @@ export async function ensureSchema(): Promise<void> {
 
     create index if not exists condo_market_listing_photos_listing_idx
       on condo_market_listing_photos (listing_id, sort_order, id);
+
+    create table if not exists condo_market_listing_interests (
+      id serial primary key,
+      listing_id integer not null references condo_market_listings(id) on delete cascade,
+      user_id integer not null references app_users(id) on delete cascade,
+      created_at timestamptz not null default now(),
+      unique (listing_id, user_id)
+    );
+
+    create index if not exists condo_market_listing_interests_listing_idx
+      on condo_market_listing_interests (listing_id, created_at desc);
+    create index if not exists condo_market_listing_interests_user_idx
+      on condo_market_listing_interests (user_id, created_at desc);
 
     create table if not exists condo_collaborators (
       id serial primary key,
@@ -999,7 +1025,11 @@ export async function ensureSchema(): Promise<void> {
   await query(`
     alter table app_users drop constraint if exists app_users_role_check;
     alter table app_users add constraint app_users_role_check
-      check (role in ('admin', 'syndic', 'administrator', 'resident', 'partner', 'collaborator'));
+      check (role in ('admin', 'syndic', 'administrator', 'resident', 'partner', 'collaborator', 'doorman'));
+
+    alter table relation_threads drop constraint if exists relation_threads_channel_check;
+    alter table relation_threads add constraint relation_threads_channel_check
+      check (channel in ('syndic', 'administration', 'doorman', 'collaborator'));
 
     alter table individual_communications
       drop constraint if exists individual_communications_from_staff_role_check;
@@ -1007,7 +1037,7 @@ export async function ensureSchema(): Promise<void> {
       add constraint individual_communications_from_staff_role_check
       check (
         from_staff_role is null
-        or from_staff_role in ('syndic', 'administrator', 'collaborator')
+        or from_staff_role in ('syndic', 'administrator', 'collaborator', 'doorman')
       );
 
     alter table condo_contacts add column if not exists visible_to varchar(40);
@@ -1239,6 +1269,17 @@ export async function ensureSchema(): Promise<void> {
       active = excluded.active;
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
+    select c.id, null, 'Pedro Portaria', 'portaria', 'portaria', 'doorman', true
+    from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
+    on conflict (login) do update set
+      condo_id = excluded.condo_id,
+      unit_id = excluded.unit_id,
+      full_name = excluded.full_name,
+      password_plain = excluded.password_plain,
+      role = excluded.role,
+      active = excluded.active;
+
+    insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
     select c.id, null, 'Laura Colaboradora', 'colaborador', 'colaborador', 'collaborator', true
     from (select id from condos where name = 'Residencial Jardim Central' order by id asc limit 1) c
     on conflict (login) do update set
@@ -1288,6 +1329,7 @@ export async function ensureSchema(): Promise<void> {
           when lower('morador') then 'resident'
           when lower('parceiro') then 'partner'
           when lower('colaborador') then 'collaborator'
+          when lower('portaria') then 'doorman'
           else au.role
         end,
         active = true
@@ -1297,7 +1339,8 @@ export async function ensureSchema(): Promise<void> {
       lower('administradora'),
       lower('morador'),
       lower('parceiro'),
-      lower('colaborador')
+      lower('colaborador'),
+      lower('portaria')
     );
 
     insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)

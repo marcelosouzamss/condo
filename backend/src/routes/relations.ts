@@ -4,7 +4,7 @@ import { query } from '../db';
 
 const router = Router();
 
-const CHANNELS = ['syndic', 'administration'] as const;
+const CHANNELS = ['syndic', 'administration', 'doorman', 'collaborator'] as const;
 type RelationChannel = (typeof CHANNELS)[number];
 
 const SENDER_SIDES = ['resident', 'staff', 'partner'] as const;
@@ -20,8 +20,8 @@ function parseCondoId(raw: unknown): number | null {
 
 function parseChannel(raw: unknown): RelationChannel | null {
   const s = String(raw ?? '').trim();
-  if (s === 'syndic' || s === 'administration') {
-    return s;
+  if (CHANNELS.includes(s as RelationChannel)) {
+    return s as RelationChannel;
   }
   return null;
 }
@@ -97,7 +97,7 @@ async function ensurePartnerThread(
   return ins.rows[0].id as number;
 }
 
-/** Lista conversas por canal (síndico ou administração), ordenadas pela última mensagem. */
+/** Lista conversas por canal, ordenadas pela última mensagem. */
 router.get('/inbox', async (req, res, next) => {
   try {
     const condoId = parseCondoId(req.query.condoId);
@@ -106,7 +106,7 @@ router.get('/inbox', async (req, res, next) => {
     }
     const channel = parseChannel(req.query.channel);
     if (channel == null) {
-      return res.status(400).json({ message: 'channel deve ser syndic ou administration.' });
+      return res.status(400).json({ message: 'channel invalido.' });
     }
 
     const r = await query(
@@ -218,7 +218,7 @@ router.get('/conversation', async (req, res, next) => {
   }
 });
 
-/** Conversa parceiro → síndico/administração (sem unidade). */
+/** Conversa parceiro → equipe do condomínio (sem unidade). */
 router.get('/partner-conversation', async (req, res, next) => {
   try {
     const condoId = parseCondoId(req.query.condoId);
