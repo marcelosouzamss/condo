@@ -139,6 +139,61 @@ router.get('/inbox', async (req, res, next) => {
   }
 });
 
+/** Resumo para card Chats (Fale com o Condomínio) no painel síndico/administração. */
+router.get('/inbox-stats', async (req, res, next) => {
+  try {
+    const condoId = parseCondoId(req.query.condoId);
+    if (condoId == null) {
+      return res.status(400).json({ message: 'condoId invalido.' });
+    }
+    const channel = parseChannel(req.query.channel);
+    if (channel == null) {
+      return res.status(400).json({ message: 'channel invalido.' });
+    }
+
+    const r = await query(
+      `select
+         count(*)::int as thread_count,
+         count(*) filter (
+           where exists (
+             select 1 from relation_messages m where m.thread_id = t.id
+           )
+         )::int as conversation_count,
+         count(*) filter (
+           where exists (
+             select 1 from relation_messages m where m.thread_id = t.id
+           )
+           and (
+             select m.sender_side
+             from relation_messages m
+             where m.thread_id = t.id
+             order by m.created_at desc
+             limit 1
+           ) <> 'staff'
+         )::int as awaiting_staff_reply_count
+       from relation_threads t
+       where t.condo_id = $1 and t.channel = $2`,
+      [condoId, channel],
+    );
+
+    const row = r.rows[0] as {
+      thread_count: number;
+      conversation_count: number;
+      awaiting_staff_reply_count: number;
+    };
+
+    return res.json({
+      condoId,
+      channel,
+      threadCount: row.thread_count,
+      conversationCount: row.conversation_count,
+      awaitingStaffReplyCount: row.awaiting_staff_reply_count,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 /** Resumo das duas linhas de conversa da unidade (última mensagem por canal). */
 router.get('/unit-summary', async (req, res, next) => {
   try {

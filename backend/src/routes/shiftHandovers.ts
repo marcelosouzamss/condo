@@ -179,7 +179,12 @@ router.get('/areas', async (req, res, next) => {
               a.active,
               a.created_by_user_id,
               a.created_at,
-              a.updated_at
+              a.updated_at,
+              (
+                select max(e.created_at)
+                from shift_handover_entries e
+                where e.area_id = a.id
+              ) as last_entry_at
        from shift_handover_areas a
        where a.condo_id = $1
          and (
@@ -193,7 +198,9 @@ router.get('/areas', async (req, res, next) => {
              )
            )
          )
-       order by a.active desc, lower(a.name) asc`,
+       order by last_entry_at desc nulls last,
+                a.updated_at desc,
+                a.created_at desc`,
       [condoId, manage, userId],
     );
 

@@ -551,6 +551,25 @@ export async function ensureSchema(): Promise<void> {
     create index if not exists condo_lost_found_achei_lf_idx
       on condo_lost_found_achei (lost_found_id, created_at);
 
+    create table if not exists condo_complaints_book (
+      id serial primary key,
+      condo_id integer not null references condos(id) on delete cascade,
+      unit_id integer references units(id) on delete set null,
+      created_by_user_id integer not null references app_users(id) on delete restrict,
+      entry_type varchar(20) not null
+        check (entry_type in ('occurrence', 'complaint', 'improvement')),
+      subject varchar(200) not null,
+      description text not null,
+      status varchar(20) not null default 'open'
+        check (status in ('open', 'in_progress', 'closed')),
+      admin_response text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create index if not exists condo_complaints_book_condo_idx
+      on condo_complaints_book (condo_id, entry_type, status, created_at desc);
+
     alter table condo_lost_found add column if not exists unit_id integer references units(id) on delete set null;
     alter table condo_lost_found add column if not exists photo_url text;
     alter table condo_lost_found add column if not exists photo_urls jsonb not null default '[]'::jsonb;
@@ -1069,6 +1088,14 @@ export async function ensureSchema(): Promise<void> {
     alter table condo_lost_found drop constraint if exists condo_lost_found_status_check;
     alter table condo_lost_found add constraint condo_lost_found_status_check
       check (status in ('open', 'resolved'));
+
+    alter table condo_complaints_book drop constraint if exists condo_complaints_book_entry_type_check;
+    alter table condo_complaints_book add constraint condo_complaints_book_entry_type_check
+      check (entry_type in ('occurrence', 'complaint', 'improvement'));
+
+    alter table condo_complaints_book drop constraint if exists condo_complaints_book_status_check;
+    alter table condo_complaints_book add constraint condo_complaints_book_status_check
+      check (status in ('open', 'in_progress', 'closed'));
 
     alter table condo_market_listings drop constraint if exists condo_market_listings_status_check;
     alter table condo_market_listings add constraint condo_market_listings_status_check
