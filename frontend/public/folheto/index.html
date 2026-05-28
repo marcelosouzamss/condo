@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="CondoLM — O condomínio inteligente na palma da mão. Plataforma completa para gestão, comunicação e rotina de condomínios."
+    />
+    <title>CondoLM — Folheto</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #0c6b58;
+        --primary-dark: #064a3d;
+        --primary-light: #e8f5f1;
+        --accent: #14b8a6;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --surface: #ffffff;
+        --bg: #f4f8f7;
+        --radius: 20px;
+        --shadow: 0 20px 50px rgba(12, 107, 88, 0.12);
+        --max: 1120px;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.6;
+      }
+
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      /* Evita que a regra global encolha capturas dentro dos cards. */
+      .shot__frame img {
+        max-width: none;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .wrap {
+        width: min(100% - 32px, var(--max));
+        margin-inline: auto;
+      }
+
+      /* Header */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        backdrop-filter: blur(14px);
+        background: rgba(255, 255, 255, 0.88);
+        border-bottom: 1px solid rgba(12, 107, 88, 0.08);
+      }
+
+      .topbar__inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        font-size: 1.15rem;
+        color: var(--primary-dark);
+      }
+
+      .brand__mark {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        background: linear-gradient(145deg, var(--primary), var(--accent));
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 1.1rem;
+      }
+
+      .topbar__nav {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.92rem;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn--primary {
+        background: linear-gradient(135deg, var(--primary), #0a8a72);
+        color: #fff;
+        box-shadow: 0 10px 24px rgba(12, 107, 88, 0.25);
+      }
+
+      .btn--ghost {
+        background: transparent;
+        color: var(--primary-dark);
+        border: 1px solid rgba(12, 107, 88, 0.25);
+      }
+
+      /* Hero */
+      .hero {
+        padding: 48px 0 72px;
+        background:
+          radial-gradient(circle at 10% 20%, rgba(20, 184, 166, 0.18), transparent 42%),
+          radial-gradient(circle at 90% 0%, rgba(12, 107, 88, 0.14), transparent 38%),
+          var(--bg);
+      }
+
+      .hero__grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 40px;
+        align-items: center;
+      }
+
+      .hero__eyebrow {
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: var(--primary-light);
+        color: var(--primary-dark);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+
+      .hero h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2.2rem, 5vw, 3.4rem);
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+        color: var(--primary-dark);
+      }
+
+      .hero__lead {
+        margin: 0 0 24px;
+        font-size: 1.12rem;
+        color: var(--muted);
+        max-width: 52ch;
+      }
+
+      .hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+
+      .hero__pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .pill {
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid rgba(12, 107, 88, 0.12);
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--primary-dark);
+      }
+
+      .hero__visual {
+        position: relative;
+      }
+
+      .hero__visual img {
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+      }
+
+      .hero__visual::after {
+        content: '';
+        position: absolute;
+        inset: auto -8% -8% 12%;
+        height: 40%;
+        background: linear-gradient(180deg, transparent, rgba(12, 107, 88, 0.08));
+        border-radius: 28px;
+        z-index: -1;
+      }
+
+      /* Sections */
+      section {
+        padding: 64px 0;
+      }
+
+      .section--white {
+        background: var(--surface);
+      }
+
+      .section__head {
+        text-align: center;
+        max-width: 720px;
+        margin: 0 auto 40px;
+      }
+
+      .section__head h2 {
+        margin: 0 0 12px;
+        font-size: clamp(1.6rem, 3vw, 2.2rem);
+        letter-spacing: -0.02em;
+        color: var(--primary-dark);
+      }
+
+      .section__head p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .intro-card {
+        background: linear-gradient(145deg, var(--primary-dark), var(--primary));
+        color: #fff;
+        border-radius: calc(var(--radius) + 4px);
+        padding: 36px 32px;
+        box-shadow: var(--shadow);
+      }
+
+      .intro-card h2 {
+        margin: 0 0 14px;
+        font-size: 1.8rem;
+      }
+
+      .intro-card p {
+        margin: 0;
+        opacity: 0.92;
+        font-size: 1.05rem;
+        max-width: 70ch;
+      }
+
+      /* Feature blocks — faixas full-width com degradê */
+      #funcionalidades {
+        padding: 64px 0 0;
+      }
+
+      #funcionalidades > .wrap {
+        margin-bottom: 8px;
+      }
+
+      .feature-block {
+        display: block;
+        margin-bottom: 0;
+        padding: 52px 0;
+        background: linear-gradient(165deg, #edf5f2 0%, #e3ece8 100%);
+      }
+
+      .feature-block--stripe-1 {
+        background: linear-gradient(165deg, #edf5f2 0%, #dce9e4 100%);
+      }
+
+      .feature-block--stripe-2 {
+        background: linear-gradient(165deg, #e8f3ef 0%, #edf5f2 55%, #ddeae5 100%);
+      }
+
+      .feature-block--stripe-3 {
+        background: linear-gradient(165deg, #e3ece8 0%, #edf5f2 50%, #d8e9e3 100%);
+      }
+
+      .feature-block--stripe-4 {
+        background: linear-gradient(165deg, #edf5f2 0%, #e0ebe7 100%);
+      }
+
+      .feature-block--stripe-5 {
+        background: linear-gradient(165deg, #e8f5f1 0%, #e3ece8 60%, #dce9e4 100%);
+      }
+
+      .feature-block__inner {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 32px;
+        align-items: center;
+      }
+
+      #funcionalidades .feature-card,
+      #funcionalidades .feature-block__media {
+        min-width: 0;
+      }
+
+      #funcionalidades .feature-card {
+        position: relative;
+        z-index: 2;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 8px 0;
+        height: auto;
+      }
+
+      /* Linhas ímpares: imagem à esquerda, texto à direita */
+      .feature-block--image-left .feature-block__media {
+        order: -1;
+      }
+
+      .feature-block__media {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        position: relative;
+        isolation: isolate;
+      }
+
+      .feature-card__icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: var(--primary-light);
+        display: grid;
+        place-items: center;
+        font-size: 1.4rem;
+        margin-bottom: 14px;
+      }
+
+      #funcionalidades .feature-card__icon {
+        background: rgba(255, 255, 255, 0.55);
+      }
+
+      .feature-card h3 {
+        margin: 0 0 14px;
+        font-size: 1.35rem;
+        color: var(--primary-dark);
+      }
+
+      #funcionalidades .feature-card__desc {
+        margin: 0 0 20px;
+        color: var(--muted);
+        font-size: 0.98rem;
+        line-height: 1.65;
+        max-width: 52ch;
+      }
+
+      .feature-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+      }
+
+      .feature-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-weight: 500;
+        line-height: 1.45;
+      }
+
+      .feature-list li::before {
+        content: '✓';
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--primary);
+        display: grid;
+        place-items: center;
+        font-size: 0.72rem;
+        font-weight: 800;
+        margin-top: 2px;
+      }
+
+      #funcionalidades .shot {
+        flex: 1;
+        width: 100%;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0;
+        overflow: hidden;
+        box-shadow: none;
+        border: none;
+        background: transparent;
+        min-height: auto;
+      }
+
+      #funcionalidades .shot__frame {
+        flex: 1;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        min-height: auto;
+        max-width: 100%;
+      }
+
+      /* Mockups de celular — zoom contido e centralizado na coluna */
+      .shot--mockup .shot__frame {
+        padding: 12px 16px;
+        background: transparent;
+        min-height: auto;
+      }
+
+      .shot--mockup .shot__frame img {
+        display: block;
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 420px;
+        margin: 0 auto;
+        object-fit: contain;
+        object-position: center center;
+        border-radius: 0;
+        box-shadow: none;
+        transform: scale(1.22);
+        transform-origin: center center;
+      }
+
+      /* Capturas de tela do app — centralizadas e ampliadas */
+      .shot--app .shot__frame {
+        padding: 22px 18px;
+        background: linear-gradient(165deg, #edf5f2 0%, #e3ece8 100%);
+      }
+
+      .shot--app .shot__frame img {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 540px;
+        object-fit: contain;
+        object-position: center;
+        border-radius: 16px;
+        box-shadow: 0 18px 44px rgba(12, 107, 88, 0.18);
+      }
+
+      /* Foto promocional — imagem inteira visível, sem zoom */
+      .shot--photo-full .shot__frame {
+        padding: 0;
+        background: transparent;
+        min-height: auto;
+        overflow: hidden;
+      }
+
+      .shot--photo-full .shot__frame img {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 500px;
+        object-fit: contain;
+        object-position: center;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(12, 107, 88, 0.12);
+        transform: none;
+      }
+
+      /* Fotos promocionais — preenchem o card (crop) */
+      .shot--banner .shot__frame {
+        padding: 0;
+        min-height: 420px;
+      }
+
+      .shot--banner .shot__frame img {
+        width: 100%;
+        height: 100%;
+        min-height: 420px;
+        object-fit: cover;
+        object-position: center;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      #funcionalidades .shot figcaption {
+        flex-shrink: 0;
+        padding: 10px 0 0;
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-align: center;
+        background: transparent;
+        border: none;
+      }
+
+      .shot figcaption {
+        flex-shrink: 0;
+        padding: 12px 16px;
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-align: center;
+        background: #fff;
+        border-top: 1px solid rgba(12, 107, 88, 0.06);
+      }
+
+      /* Benefits */
+      .benefits {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+      }
+
+      .benefit {
+        background: #fff;
+        border-radius: var(--radius);
+        padding: 24px;
+        border: 1px solid rgba(12, 107, 88, 0.08);
+      }
+
+      .benefit h3 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+        color: var(--primary-dark);
+      }
+
+      .benefit p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      /* Promo — Conheça o app */
+      .promo-offer {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 28px;
+        background: linear-gradient(145deg, var(--primary-dark), var(--primary));
+        color: #fff;
+        border-radius: calc(var(--radius) + 8px);
+        padding: 40px 32px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .promo-offer::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 320px;
+        height: 320px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+        pointer-events: none;
+      }
+
+      .promo-offer__badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+
+      .promo-offer__headline {
+        margin: 0 0 8px;
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+
+      .promo-offer__headline em {
+        font-style: normal;
+        color: #a7f3d0;
+      }
+
+      .promo-offer__sub {
+        margin: 0 0 24px;
+        font-size: 1.12rem;
+        opacity: 0.94;
+        max-width: 58ch;
+      }
+
+      .promo-offer__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .promo-offer__item {
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--radius);
+        padding: 22px 20px;
+      }
+
+      .promo-offer__item strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 1.05rem;
+      }
+
+      .promo-offer__item p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        opacity: 0.92;
+      }
+
+      .promo-offer__note {
+        margin: 24px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        font-size: 0.98rem;
+        line-height: 1.65;
+        opacity: 0.94;
+        max-width: 72ch;
+      }
+
+      @media (min-width: 900px) {
+        .promo-offer {
+          padding: 48px 44px;
+        }
+      }
+
+      /* Ideal */
+      .ideal-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+      }
+
+      .ideal-tags span {
+        padding: 12px 20px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid rgba(12, 107, 88, 0.12);
+        font-weight: 600;
+        color: var(--primary-dark);
+      }
+
+      /* CTA */
+      .cta {
+        background: linear-gradient(145deg, var(--primary-dark), var(--primary));
+        color: #fff;
+        border-radius: calc(var(--radius) + 8px);
+        padding: 48px 32px;
+        text-align: center;
+        box-shadow: var(--shadow);
+      }
+
+      .cta h2 {
+        margin: 0 0 10px;
+        font-size: clamp(1.6rem, 3vw, 2.4rem);
+      }
+
+      .cta p {
+        margin: 0 auto 24px;
+        max-width: 56ch;
+        opacity: 0.92;
+      }
+
+      /* Contact */
+      .contact-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+      }
+
+      .contact-item {
+        background: #fff;
+        border-radius: var(--radius);
+        padding: 22px;
+        border: 1px dashed rgba(12, 107, 88, 0.25);
+      }
+
+      .contact-item strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--primary-dark);
+      }
+
+      .contact-item span {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .qr-box {
+        width: 120px;
+        height: 120px;
+        border-radius: 16px;
+        border: 2px dashed rgba(12, 107, 88, 0.3);
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 0.78rem;
+        text-align: center;
+        padding: 8px;
+        background: var(--primary-light);
+      }
+
+      footer {
+        padding: 28px 0 40px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      @media (min-width: 900px) {
+        .hero__grid {
+          grid-template-columns: 1.05fr 0.95fr;
+        }
+
+        .feature-block__inner {
+          grid-template-columns: 1fr 1fr;
+          gap: 56px;
+        }
+
+        .feature-block--image-left .feature-block__media {
+          order: 1;
+        }
+
+        .feature-block--image-left .feature-card {
+          order: 2;
+        }
+
+        .shot--mockup .shot__frame img {
+          max-height: 480px;
+          transform: scale(1.28);
+          transform-origin: center center;
+        }
+
+        #funcionalidades .shot--photo-full .shot__frame img {
+          max-height: 480px;
+          transform: none;
+        }
+
+        .shot--app .shot__frame img {
+          max-height: 560px;
+        }
+
+        .shot--banner .shot__frame,
+        .shot--banner .shot__frame img {
+          min-height: 480px;
+        }
+      }
+
+      @media print {
+        .topbar,
+        .hero__actions,
+        .btn {
+          display: none !important;
+        }
+
+        body {
+          background: #fff;
+        }
+
+        .hero,
+        section {
+          padding: 24px 0;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap topbar__inner">
+        <a class="brand" href="#topo">
+          <span class="brand__mark" aria-hidden="true">🏢</span>
+          CondoLM
+        </a>
+        <nav class="topbar__nav">
+          <a class="btn btn--ghost" href="#funcionalidades">Funcionalidades</a>
+          <a class="btn btn--primary" href="/login" target="_top">Acessar plataforma</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="topo">
+      <section class="hero">
+        <div class="wrap hero__grid">
+          <div>
+            <span class="hero__eyebrow">O condomínio inteligente na palma da mão</span>
+            <h1>CondoLM</h1>
+            <p class="hero__lead">
+              Plataforma moderna para facilitar a comunicação, a administração e a rotina de
+              condomínios residenciais e corporativos — conectando moradores, síndicos,
+              administradores e colaboradores em um único ambiente digital.
+            </p>
+            <div class="hero__actions">
+              <a class="btn btn--primary" href="/login" target="_top">Entrar no app</a>
+              <a class="btn btn--ghost" href="#contato">Falar conosco</a>
+            </div>
+            <div class="hero__pills">
+              <span class="pill">Mais praticidade</span>
+              <span class="pill">Mais segurança</span>
+              <span class="pill">Mais comunicação</span>
+              <span class="pill">Mais transparência</span>
+            </div>
+          </div>
+          <div class="hero__visual">
+            <img src="img/imagens.jpg" alt="CondoLM — gestão completa na palma da sua mão" width="640" height="360" />
+          </div>
+        </div>
+      </section>
+
+      <section class="section--white">
+        <div class="wrap">
+          <div class="intro-card">
+            <h2>Transforme a gestão do seu condomínio</h2>
+            <p>
+              Com interface intuitiva e funcionalidades completas, o CondoLM centraliza avisos,
+              reservas, cobrança, manutenção, encomendas e comunicação — reduzindo retrabalho e
+              trazendo mais transparência para toda a comunidade.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="funcionalidades">
+        <div class="wrap">
+          <div class="section__head">
+            <h2>Principais funcionalidades</h2>
+            <p>Tudo o que seu condomínio precisa, organizado por área de uso.</p>
+          </div>
+        </div>
+
+        <article class="feature-block feature-block--image-left feature-block--stripe-1">
+          <div class="wrap feature-block__inner">
+            <div class="feature-card">
+              <div class="feature-card__icon" aria-hidden="true">🏛️</div>
+              <h3>Gestão e Administração</h3>
+              <p class="feature-card__desc">
+                Síndico e administradora acompanham unidades, moradores e rotinas do condomínio em um
+                painel único, com relatórios e indicadores para decisões mais rápidas. Em Minha Unidade,
+                cada família consulta dados do apartamento, veículos e histórico sem depender da portaria.
+                Boletos e documentos — regulamentos, atas e arquivos — ficam centralizados com acesso
+                controlado por perfil. A passagem de turno registra o que ocorreu entre equipes operacionais,
+                garantindo continuidade no atendimento.
+              </p>
+              <ul class="feature-list">
+                <li>Área do Síndico</li>
+                <li>Cadastro de Condomínios</li>
+                <li>Administração Geral</li>
+                <li>Minha Unidade</li>
+                <li>Controle de Acesso</li>
+                <li>Boleto Online</li>
+                <li>Documentos</li>
+                <li>Passagem de Turno</li>
+              </ul>
+            </div>
+            <figure class="shot shot--mockup feature-block__media">
+              <div class="shot__frame">
+                <img src="img/feat-gestao-v2.png" alt="Tela de funcionalidades do CondoLM" loading="lazy" />
+              </div>
+              <figcaption>Painel completo de funcionalidades</figcaption>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature-block feature-block--stripe-2">
+          <div class="wrap feature-block__inner">
+            <div class="feature-card">
+              <div class="feature-card__icon" aria-hidden="true">💬</div>
+              <h3>Comunicação Integrada</h3>
+              <p class="feature-card__desc">
+                O mural de avisos e os comunicados individuais substituem bilhetes e grupos dispersos,
+                mantendo moradores informados sobre o que importa. Pelo Fale com o Condomínio, dúvidas e
+                solicitações chegam direto à gestão, com histórico e acompanhamento. Videoconferência
+                integrada facilita reuniões e alinhamentos sem deslocamento. Contatos e quadro de
+                colaboradores organizam quem cuida do prédio — portaria, zeladoria, síndico e prestadores.
+              </p>
+              <ul class="feature-list">
+                <li>Fale com o Condomínio</li>
+                <li>Mural de Avisos</li>
+                <li>Comunicados Individuais</li>
+                <li>Videoconferência</li>
+                <li>Contatos</li>
+                <li>Quadro de Colaboradores</li>
+              </ul>
+            </div>
+            <figure class="shot shot--mockup feature-block__media">
+              <div class="shot__frame">
+                <img src="img/feat-comunicacao-v2.png" alt="Comunicação no CondoLM" loading="lazy" />
+              </div>
+              <figcaption>Canais de comunicação integrados</figcaption>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature-block feature-block--image-left feature-block--stripe-3">
+          <div class="wrap feature-block__inner">
+            <div class="feature-card">
+              <div class="feature-card__icon" aria-hidden="true">🛡️</div>
+              <h3>Segurança e Controle</h3>
+              <p class="feature-card__desc">
+                Em Emergência, o morador aciona o condomínio com um toque em casos de sinistro, incêndio,
+                invasão, violência ou agressão — inclusive situações de risco imediato à mulher — com
+                alerta prioritário para portaria e gestão. O controle de acesso registra visitantes,
+                prestadores e entradas com mais rastreabilidade. Encomendas são lançadas na portaria e o
+                morador é avisado na hora. Achados e perdidos e o Livro de Reclamações formalizam
+                ocorrências com registro e resposta documentada.
+              </p>
+              <ul class="feature-list">
+                <li>Controle de Acesso</li>
+                <li>Emergência</li>
+                <li>Registro de Encomendas</li>
+                <li>Achados e Perdidos</li>
+                <li>Livro de Reclamações</li>
+              </ul>
+            </div>
+            <figure class="shot shot--photo-full feature-block__media">
+              <div class="shot__frame">
+                <img src="img/feat-servicos.png" alt="Controle de acesso no CondoLM" loading="lazy" />
+              </div>
+              <figcaption>Controle de acesso mais seguro e inteligente</figcaption>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature-block feature-block--stripe-4">
+          <div class="wrap feature-block__inner">
+            <div class="feature-card">
+              <div class="feature-card__icon" aria-hidden="true">📅</div>
+              <h3>Reservas e Organização</h3>
+              <p class="feature-card__desc">
+                Reservas de salão, churrasqueira e áreas comuns usam calendário visual e respeitam as
+                regras definidas pelo condomínio, evitando conflitos de horário. O calendário de eventos
+                reúne festas, manutenções programadas e avisos importantes em uma agenda compartilhada.
+                Assembleias virtuais ampliam a participação de quem não pode comparecer presencialmente.
+                Enquetes e votações registram decisões da comunidade com transparência e histórico
+                consultável.
+              </p>
+              <ul class="feature-list">
+                <li>Reservas de Espaço</li>
+                <li>Calendário de Eventos</li>
+                <li>Assembleias Virtuais</li>
+                <li>Enquetes e Votações</li>
+              </ul>
+            </div>
+            <figure class="shot shot--mockup feature-block__media">
+              <div class="shot__frame">
+                <img src="img/feat-reservas-v2.png" alt="Reserva de espaços no CondoLM" loading="lazy" />
+              </div>
+              <figcaption>Reservas de espaços com calendário</figcaption>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature-block feature-block--image-left feature-block--stripe-5">
+          <div class="wrap feature-block__inner">
+            <div class="feature-card">
+              <div class="feature-card__icon" aria-hidden="true">🛎️</div>
+              <h3>Serviços e Conveniência</h3>
+              <p class="feature-card__desc">
+                Solicite manutenção pelo app — vazamento, elétrica, elevador — e acompanhe o andamento
+                até a conclusão; síndico e equipe gerenciam fila e prioridades. O guia de serviços reúne
+                prestadores indicados com contatos, descrição e portfólio. Mercado interno e ofertas
+                conectam moradores a compras, vendas e parcerias locais. Pets são cadastrados com foto
+                para identificação rápida em áreas comuns e registro junto à administração.
+              </p>
+              <ul class="feature-list">
+                <li>Solicitação de Manutenção</li>
+                <li>Guia de Serviços</li>
+                <li>Mercado Interno</li>
+                <li>Ofertas</li>
+                <li>Animais de Estimação com Foto</li>
+              </ul>
+            </div>
+            <figure class="shot shot--mockup feature-block__media">
+              <div class="shot__frame">
+                <img src="img/feat-servicos-v2.png" alt="Serviços e conveniência no CondoLM" loading="lazy" />
+              </div>
+              <figcaption>Serviços e rotina do morador</figcaption>
+            </figure>
+          </div>
+        </article>
+      </section>
+
+      <section class="section--white">
+        <div class="wrap">
+          <div class="section__head">
+            <h2>Benefícios do CondoLM</h2>
+            <p>Tecnologia pensada para simplificar o dia a dia de quem vive e gerencia condomínios.</p>
+          </div>
+          <div class="benefits">
+            <article class="benefit">
+              <h3>Mais organização</h3>
+              <p>Centralize informações e serviços do condomínio em um único sistema.</p>
+            </article>
+            <article class="benefit">
+              <h3>Mais segurança</h3>
+              <p>Controle acessos, registros e comunicação de forma rápida e segura.</p>
+            </article>
+            <article class="benefit">
+              <h3>Mais praticidade</h3>
+              <p>Moradores resolvem tarefas diretamente pelo aplicativo ou portal web.</p>
+            </article>
+            <article class="benefit">
+              <h3>Mais transparência</h3>
+              <p>Facilite assembleias, votações e comunicação entre gestão e moradores.</p>
+            </article>
+            <article class="benefit">
+              <h3>Mais eficiência</h3>
+              <p>Automatize processos administrativos e reduza retrabalho da equipe.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <div class="section__head">
+            <h2>Conheça o app</h2>
+            <p>Experimente o CondoLM com condições especiais de lançamento.</p>
+          </div>
+          <div class="promo-offer">
+            <div>
+              <span class="promo-offer__badge">Oferta promocional</span>
+              <h3 class="promo-offer__headline">
+                <em>2 meses grátis</em> para usar toda a plataforma
+              </h3>
+              <p class="promo-offer__sub">
+                Acesso completo ao CondoLM, sem custo, por dois meses — ideal para conhecer na prática
+                a gestão, a comunicação e a rotina do seu condomínio.
+              </p>
+            </div>
+            <div class="promo-offer__grid">
+              <article class="promo-offer__item">
+                <strong>🎁 2 meses de acesso gratuito</strong>
+                <p>
+                  Utilize todos os módulos da plataforma durante o período promocional e avalie o
+                  impacto no dia a dia da administração e dos moradores.
+                </p>
+              </article>
+              <article class="promo-offer__item">
+                <strong>🏢 +1 mês grátis por indicação</strong>
+                <p>
+                  Conseguiu trazer outro condomínio para o CondoLM? Ganhe mais um mês de uso gratuito
+                  como reconhecimento pela indicação.
+                </p>
+              </article>
+              <article class="promo-offer__item">
+                <strong>🎨 App personalizado para o seu condomínio</strong>
+                <p>
+                  A plataforma pode ser adaptada às necessidades do seu prédio — identidade visual,
+                  funcionalidades em destaque e fluxos alinhados à realidade da gestão local.
+                </p>
+              </article>
+            </div>
+            <p class="promo-offer__note">
+              Cada condomínio tem sua rotina. Por isso, o CondoLM pode ser personalizado de acordo com
+              as necessidades da sua administração — do layout da tela inicial aos módulos mais usados
+              pela portaria, síndico e moradores.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section--white">
+        <div class="wrap">
+          <div class="section__head">
+            <h2>Ideal para</h2>
+          </div>
+          <div class="ideal-tags">
+            <span>Condomínios residenciais</span>
+            <span>Condomínios corporativos</span>
+            <span>Condomínios horizontais</span>
+            <span>Condomínios verticais</span>
+            <span>Associações residenciais</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <div class="cta">
+            <h2>Tecnologia, comunicação e gestão para condomínios modernos</h2>
+            <p>Tudo o que seu condomínio precisa em um único aplicativo.</p>
+            <a class="btn btn--ghost" href="/login" target="_top" style="background: #fff; border: none; color: var(--primary-dark)">
+              Acessar CondoLM
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="contato" class="section--white">
+        <div class="wrap">
+          <div class="section__head">
+            <h2>Contato</h2>
+            <p>Personalize os dados abaixo com as informações da sua empresa.</p>
+          </div>
+          <div class="contact-grid">
+            <div class="contact-item">
+              <strong>Site</strong>
+              <span>www.seudominio.com.br</span>
+            </div>
+            <div class="contact-item">
+              <strong>E-mail</strong>
+              <span>contato@seudominio.com.br</span>
+            </div>
+            <div class="contact-item">
+              <strong>WhatsApp</strong>
+              <span>(00) 00000-0000</span>
+            </div>
+            <div class="contact-item" style="display: flex; align-items: center; gap: 16px">
+              <div class="qr-box">QR Code<br />download do app</div>
+              <div>
+                <strong>Redes sociais</strong>
+                <span>Instagram · LinkedIn · Facebook</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">© <span id="year"></span> CondoLM — Gestão inteligente para condomínios.</div>
+    </footer>
+
+    <script>
+      document.getElementById('year').textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>
