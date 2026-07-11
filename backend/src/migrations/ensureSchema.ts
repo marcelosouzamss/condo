@@ -1046,6 +1046,76 @@ export async function ensureSchema(): Promise<void> {
     alter table app_users add constraint app_users_role_check
       check (role in ('admin', 'syndic', 'administrator', 'resident', 'partner', 'collaborator', 'doorman'));
 
+    create table if not exists app_user_condo_memberships (
+      id serial primary key,
+      user_id integer not null references app_users(id) on delete cascade,
+      condo_id integer not null references condos(id) on delete cascade,
+      role varchar(30) not null
+        check (role in ('admin', 'syndic', 'administrator', 'resident', 'partner', 'collaborator', 'doorman')),
+      unit_id integer references units(id) on delete set null,
+      active boolean not null default true,
+      created_at timestamptz not null default now(),
+      unique (user_id, condo_id)
+    );
+
+    create index if not exists app_user_condo_memberships_user_idx
+      on app_user_condo_memberships (user_id, active);
+
+    create index if not exists app_user_condo_memberships_condo_idx
+      on app_user_condo_memberships (condo_id, role, active);
+
+    insert into app_user_condo_memberships (user_id, condo_id, role, unit_id, active)
+    select au.id, au.condo_id, au.role, au.unit_id, au.active
+    from app_users au
+    where not exists (
+      select 1 from app_user_condo_memberships m
+      where m.user_id = au.id and m.condo_id = au.condo_id
+    );
+
+    alter table app_users add column if not exists password_hash varchar(120);
+    alter table app_users alter column password_plain drop not null;
+
+    create table if not exists app_refresh_tokens (
+      id serial primary key,
+      user_id integer not null references app_users(id) on delete cascade,
+      token_hash varchar(64) not null unique,
+      expires_at timestamptz not null,
+      revoked_at timestamptz,
+      user_agent text,
+      ip_address varchar(64),
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists app_refresh_tokens_user_idx
+      on app_refresh_tokens (user_id, revoked_at, expires_at);
+
+    create table if not exists condo_home_layout (
+      condo_id integer primary key references condos(id) on delete cascade,
+      feature_order jsonb not null default '[]'::jsonb,
+      grid_columns smallint not null default 2
+        check (grid_columns in (2, 3, 4)),
+      style_preset varchar(20) not null default 'diurno'
+        check (style_preset in ('diurno', 'noturno', 'blue', 'green')),
+      allow_resident_order_override boolean not null default true,
+      updated_at timestamptz not null default now(),
+      updated_by_user_id integer references app_users(id) on delete set null
+    );
+
+    alter table app_users add column if not exists pending_activation boolean not null default false;
+
+    create table if not exists app_user_invites (
+      id serial primary key,
+      user_id integer not null references app_users(id) on delete cascade,
+      token_hash varchar(64) not null unique,
+      expires_at timestamptz not null,
+      used_at timestamptz,
+      created_by_user_id integer references app_users(id) on delete set null,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists app_user_invites_user_idx
+      on app_user_invites (user_id, used_at, expires_at);
+
     alter table relation_threads drop constraint if exists relation_threads_channel_check;
     alter table relation_threads add constraint relation_threads_channel_check
       check (channel in ('syndic', 'administration', 'doorman', 'collaborator'));

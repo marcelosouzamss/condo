@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { isOperationalStaff } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const router = Router();
 
@@ -71,15 +72,12 @@ type AppUserRow = {
   active: boolean;
 };
 
-async function loadUser(userId: number): Promise<AppUserRow | null> {
-  const r = await query(
-    `select id, condo_id, role, active from app_users where id = $1 limit 1`,
-    [userId],
-  );
-  if (r.rows.length === 0) {
+async function loadUser(userId: number, condoId: number): Promise<AppUserRow | null> {
+  const row = await loadLegacyUserRow(userId, condoId);
+  if (row == null) {
     return null;
   }
-  return r.rows[0] as AppUserRow;
+  return row as AppUserRow;
 }
 
 function canAccessCondo(user: AppUserRow, condoId: number): boolean {
@@ -110,7 +108,7 @@ router.get('/', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -161,7 +159,7 @@ router.get('/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -245,7 +243,7 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ message: 'title e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -329,7 +327,7 @@ router.patch('/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -476,7 +474,7 @@ router.delete('/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }

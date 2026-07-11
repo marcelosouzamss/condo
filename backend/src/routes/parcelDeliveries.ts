@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { isOperationalStaff } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const router = Router();
 
@@ -29,15 +30,12 @@ type AppUserRow = {
   active: boolean;
 };
 
-async function loadUser(userId: number): Promise<AppUserRow | null> {
-  const r = await query(
-    `select id, condo_id, unit_id, role, active from app_users where id = $1 limit 1`,
-    [userId],
-  );
-  if (r.rows.length === 0) {
+async function loadUser(userId: number, condoId: number): Promise<AppUserRow | null> {
+  const row = await loadLegacyUserRow(userId, condoId);
+  if (row == null) {
     return null;
   }
-  return r.rows[0] as AppUserRow;
+  return row as AppUserRow;
 }
 
 router.get('/', async (req, res, next) => {
@@ -50,7 +48,7 @@ router.get('/', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
@@ -133,7 +131,7 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ message: 'unitId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
@@ -204,7 +202,20 @@ router.patch('/:id/pickup', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const cur = await query(
+      `select id, condo_id, unit_id, status from condo_parcel_deliveries where id = $1`,
+      [id],
+    );
+    if (cur.rows.length === 0) {
+      return res.status(404).json({ message: 'Encomenda nao encontrada.' });
+    }
+    const row = cur.rows[0] as {
+      condo_id: number;
+      unit_id: number;
+      status: string;
+    };
+
+    const user = await loadUser(userId, row.condo_id);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
@@ -224,18 +235,6 @@ router.patch('/:id/pickup', async (req, res, next) => {
       return res.status(403).json({ message: 'Unidade inconsistente.' });
     }
 
-    const cur = await query(
-      `select id, condo_id, unit_id, status from condo_parcel_deliveries where id = $1`,
-      [id],
-    );
-    if (cur.rows.length === 0) {
-      return res.status(404).json({ message: 'Encomenda nao encontrada.' });
-    }
-    const row = cur.rows[0] as {
-      condo_id: number;
-      unit_id: number;
-      status: string;
-    };
     if (row.condo_id !== user.condo_id) {
       return res.status(403).json({ message: 'Outro condominio.' });
     }

@@ -6,7 +6,10 @@ import multer from 'multer';
 import { Router } from 'express';
 
 import { isBillingStaff, isOperationalStaff } from '../authz';
+import { buildInviteWebUrl, createUserInvite } from '../auth/invites';
+import { hashPassword, validatePasswordPolicy } from '../auth/password';
 import { query } from '../db';
+import { loadUserCondoContext } from '../userContext';
 
 const router = Router();
 
@@ -61,15 +64,17 @@ type HubUserRow = {
   active: boolean;
 };
 
-async function loadHubUser(userId: number): Promise<HubUserRow | null> {
-  const r = await query(
-    `select id, condo_id, role, active from app_users where id = $1`,
-    [userId],
-  );
-  if (r.rows.length === 0) {
+async function loadHubUser(userId: number, condoId: number): Promise<HubUserRow | null> {
+  const ctx = await loadUserCondoContext(userId, condoId);
+  if (ctx == null) {
     return null;
   }
-  return r.rows[0] as HubUserRow;
+  return {
+    id: ctx.id,
+    condo_id: ctx.condoId,
+    role: ctx.role,
+    active: true,
+  };
 }
 
 function hubReadAuthorized(user: HubUserRow | null, condoId: number): boolean {
@@ -628,7 +633,7 @@ router.get('/financial-overview', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubReadAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para visualizar este painel.' });
     }
@@ -680,7 +685,7 @@ router.get('/reports/summary', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubReadAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao.' });
     }
@@ -786,7 +791,7 @@ router.get('/contracts', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubReadAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao.' });
     }
@@ -812,7 +817,7 @@ router.post('/contracts', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Apenas sindico ou administracao podem cadastrar contratos.' });
     }
@@ -900,7 +905,7 @@ router.patch('/contracts/:id', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para editar.' });
     }
@@ -995,7 +1000,7 @@ router.delete('/contracts/:id', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para excluir.' });
     }
@@ -1019,7 +1024,7 @@ router.get('/registry-documents', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubReadAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao.' });
     }
@@ -1045,7 +1050,7 @@ router.post('/registry-documents', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Apenas sindico ou administracao podem cadastrar.' });
     }
@@ -1095,7 +1100,7 @@ router.patch('/registry-documents/:id', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const actor = await loadHubUser(userId);
+    const actor = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para editar.' });
     }
@@ -1168,7 +1173,7 @@ router.delete('/registry-documents/:id', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const user = await loadHubUser(userId);
+    const user = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para excluir.' });
     }
@@ -1194,15 +1199,24 @@ router.get('/app-users', async (req, res, next) => {
     if (userId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const viewer = await loadHubUser(userId);
+    const viewer = await loadHubUser(userId, condoId);
     if (!hubBillingAuthorized(viewer, condoId)) {
       return res.status(403).json({ message: 'Apenas sindico ou administracao podem listar usuarios do app.' });
     }
     const r = await query(
-      `select id, condo_id, unit_id, full_name, login, role, active, created_at
-       from app_users
-       where condo_id = $1
-       order by role asc, full_name asc`,
+      `select u.id, m.condo_id, m.unit_id, u.full_name, u.login, m.role,
+              (u.active and m.active) as active, u.created_at,
+              u.pending_activation,
+              exists (
+                select 1 from app_user_invites i
+                where i.user_id = u.id
+                  and i.used_at is null
+                  and i.expires_at > now()
+              ) as has_pending_invite
+       from app_user_condo_memberships m
+       join app_users u on u.id = m.user_id
+       where m.condo_id = $1
+       order by m.role asc, u.full_name asc`,
       [condoId],
     );
     return res.json(r.rows);
@@ -1220,19 +1234,39 @@ router.post('/app-users', async (req, res, next) => {
     const loginRaw = String(body.login ?? '').trim().toLowerCase();
     const passwordPlain = String(body.password ?? body.password_plain ?? '').trim();
     const role = String(body.role ?? '').trim();
+    const inviteOnly =
+      body.inviteOnly === true ||
+      body.sendInvite === true ||
+      body.invite_only === true ||
+      body.send_invite === true;
 
-    if (actorId == null || condoId == null || !fullName || !loginRaw || !passwordPlain || !role) {
+    if (actorId == null || condoId == null || !fullName || !loginRaw || !role) {
       return res.status(400).json({
-        message: 'condoId, userId (ator), fullName, login, password e role sao obrigatorios.',
+        message: 'condoId, userId (ator), fullName, login e role sao obrigatorios.',
       });
     }
 
-    const actor = await loadHubUser(actorId);
+    if (!inviteOnly && !passwordPlain) {
+      return res.status(400).json({
+        message: 'Informe password ou marque inviteOnly para enviar convite de ativacao.',
+      });
+    }
+
+    const actor = await loadHubUser(actorId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Apenas sindico ou administracao podem cadastrar usuarios.' });
     }
     if (!APP_ROLE_LIST.includes(role as (typeof APP_ROLE_LIST)[number])) {
       return res.status(400).json({ message: 'role invalido para app_users.' });
+    }
+
+    let passwordHash: string | null = null;
+    if (!inviteOnly) {
+      const passwordError = validatePasswordPolicy(passwordPlain, role);
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
+      }
+      passwordHash = await hashPassword(passwordPlain);
     }
 
     const unitIdParsed = parsePositive(body.unitId ?? body.unit_id);
@@ -1257,12 +1291,122 @@ router.post('/app-users', async (req, res, next) => {
       return res.status(404).json({ message: 'Condominio nao encontrado.' });
     }
 
-    const ins = await query(
-      `insert into app_users (condo_id, unit_id, full_name, login, password_plain, role, active)
-       values ($1, $2, $3, $4, $5, $6, true)
-       returning id, condo_id, unit_id, full_name, login, role, active, created_at`,
-      [condoId, unitId, fullName, loginRaw, passwordPlain, role],
+    const existsLogin = await query(
+      `select id from app_users where lower(login) = $1 limit 1`,
+      [loginRaw],
     );
+
+    if (existsLogin.rows.length > 0) {
+      const existingUserId = (existsLogin.rows[0] as { id: number }).id;
+      const existingUser = await query(
+        `select id, password_hash, pending_activation from app_users where id = $1 limit 1`,
+        [existingUserId],
+      );
+      const eu = existingUser.rows[0] as {
+        id: number;
+        password_hash: string | null;
+        pending_activation: boolean;
+      };
+
+      const membership = await query(
+        `insert into app_user_condo_memberships (user_id, condo_id, role, unit_id, active)
+         values ($1, $2, $3, $4, true)
+         on conflict (user_id, condo_id) do update set
+           role = excluded.role,
+           unit_id = excluded.unit_id,
+           active = true
+         returning user_id, condo_id, unit_id, role, active`,
+        [existingUserId, condoId, role, unitId],
+      );
+      const m = membership.rows[0] as {
+        user_id: number;
+        condo_id: number;
+        unit_id: number | null;
+        role: string;
+        active: boolean;
+      };
+      const userRow = await query(
+        `select id, full_name, login, created_at from app_users where id = $1`,
+        [existingUserId],
+      );
+      const u = userRow.rows[0] as {
+        id: number;
+        full_name: string;
+        login: string;
+        created_at: string;
+      };
+
+      if (inviteOnly && !eu.password_hash) {
+        await query(
+          `update app_users set pending_activation = true where id = $1`,
+          [existingUserId],
+        );
+        const invite = await createUserInvite(existingUserId, actorId);
+        return res.status(201).json({
+          id: u.id,
+          condo_id: m.condo_id,
+          unit_id: m.unit_id,
+          full_name: u.full_name,
+          login: u.login,
+          role: m.role,
+          active: m.active,
+          created_at: u.created_at,
+          pending_activation: true,
+          inviteToken: invite.rawToken,
+          inviteUrl: buildInviteWebUrl(invite.rawToken),
+          inviteExpiresAt: invite.expiresAt.toISOString(),
+        });
+      }
+
+      return res.status(201).json({
+        id: u.id,
+        condo_id: m.condo_id,
+        unit_id: m.unit_id,
+        full_name: u.full_name,
+        login: u.login,
+        role: m.role,
+        active: m.active,
+        created_at: u.created_at,
+      });
+    }
+
+    const ins = await query(
+      `insert into app_users (
+         condo_id, unit_id, full_name, login, password_plain, password_hash,
+         role, active, pending_activation
+       )
+       values ($1, $2, $3, $4, '', $5, $6, true, $7)
+       returning id, condo_id, unit_id, full_name, login, role, active,
+                 pending_activation, created_at`,
+      [condoId, unitId, fullName, loginRaw, passwordHash, role, inviteOnly],
+    );
+    const created = ins.rows[0] as {
+      id: number;
+      condo_id: number;
+      unit_id: number | null;
+      role: string;
+      pending_activation: boolean;
+    };
+    await query(
+      `insert into app_user_condo_memberships (user_id, condo_id, role, unit_id, active)
+       values ($1, $2, $3, $4, true)
+       on conflict (user_id, condo_id) do update set
+         role = excluded.role,
+         unit_id = excluded.unit_id,
+         active = true`,
+      [created.id, created.condo_id, created.role, created.unit_id],
+    );
+
+    if (inviteOnly) {
+      const invite = await createUserInvite(created.id, actorId);
+      return res.status(201).json({
+        ...ins.rows[0],
+        inviteToken: invite.rawToken,
+        inviteUrl: buildInviteWebUrl(invite.rawToken),
+        inviteExpiresAt: invite.expiresAt.toISOString(),
+      });
+    }
+
     return res.status(201).json(ins.rows[0]);
   } catch (err: unknown) {
     const code = err as { code?: string };
@@ -1286,42 +1430,49 @@ router.patch('/app-users/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
 
-    const actor = await loadHubUser(actorId);
+    const actor = await loadHubUser(actorId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para editar usuarios.' });
     }
 
     const tgt = await query(
-      `select id from app_users where id = $1 and condo_id = $2`,
+      `select m.user_id
+       from app_user_condo_memberships m
+       where m.user_id = $1 and m.condo_id = $2
+       limit 1`,
       [id, condoId],
     );
     if (tgt.rows.length === 0) {
-      return res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return res.status(404).json({ message: 'Usuario nao encontrado neste condominio.' });
     }
 
-    const fields: string[] = [];
-    const params: unknown[] = [];
-    let idx = 1;
+    const userFields: string[] = [];
+    const userParams: unknown[] = [];
+    let userIdx = 1;
+
+    const membershipFields: string[] = [];
+    const membershipParams: unknown[] = [];
+    let memIdx = 1;
 
     if (body.fullName !== undefined || body.full_name !== undefined) {
       const n = String(body.fullName ?? body.full_name ?? '').trim();
       if (!n) {
         return res.status(400).json({ message: 'fullName invalido.' });
       }
-      fields.push(`full_name = $${idx++}`);
-      params.push(n);
+      userFields.push(`full_name = $${userIdx++}`);
+      userParams.push(n);
     }
     if (body.role !== undefined) {
       const rl = String(body.role ?? '').trim();
       if (!APP_ROLE_LIST.includes(rl as (typeof APP_ROLE_LIST)[number])) {
         return res.status(400).json({ message: 'role invalido.' });
       }
-      fields.push(`role = $${idx++}`);
-      params.push(rl);
+      membershipFields.push(`role = $${memIdx++}`);
+      membershipParams.push(rl);
     }
     if (body.active !== undefined) {
-      fields.push(`active = $${idx++}`);
-      params.push(Boolean(body.active));
+      membershipFields.push(`active = $${memIdx++}`);
+      membershipParams.push(Boolean(body.active));
     }
     if (body.unitId !== undefined || body.unit_id !== undefined) {
       const parsed = parsePositive(body.unitId ?? body.unit_id);
@@ -1334,28 +1485,129 @@ router.patch('/app-users/:id', async (req, res, next) => {
           return res.status(400).json({ message: 'unitId invalido.' });
         }
       }
-      fields.push(`unit_id = $${idx++}`);
-      params.push(parsed);
+      membershipFields.push(`unit_id = $${memIdx++}`);
+      membershipParams.push(parsed);
     }
     const pwd = String(body.password ?? body.password_plain ?? '').trim();
     if (pwd !== '') {
-      fields.push(`password_plain = $${idx++}`);
-      params.push(pwd);
+      const targetRole = String(
+        body.role ??
+          (
+            await query(
+              `select role from app_user_condo_memberships
+               where user_id = $1 and condo_id = $2 limit 1`,
+              [id, condoId],
+            )
+          ).rows[0]?.role ??
+          'resident',
+      ).trim();
+      const passwordError = validatePasswordPolicy(pwd, targetRole);
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
+      }
+      const passwordHash = await hashPassword(pwd);
+      userFields.push(`password_hash = $${userIdx++}`);
+      userParams.push(passwordHash);
+      userFields.push(`password_plain = $${userIdx++}`);
+      userParams.push('');
     }
 
-    if (fields.length === 0) {
+    if (userFields.length === 0 && membershipFields.length === 0) {
       return res.status(400).json({ message: 'Nada para atualizar.' });
     }
 
-    params.push(id, condoId);
+    if (userFields.length > 0) {
+      userParams.push(id);
+      await query(
+        `update app_users set ${userFields.join(', ')} where id = $${userIdx}`,
+        userParams,
+      );
+    }
+
+    if (membershipFields.length > 0) {
+      membershipParams.push(id, condoId);
+      await query(
+        `update app_user_condo_memberships set ${membershipFields.join(', ')}
+         where user_id = $${memIdx++} and condo_id = $${memIdx}`,
+        membershipParams,
+      );
+    }
+
     const r = await query(
-      `update app_users set ${fields.join(', ')}
-       where id = $${idx++} and condo_id = $${idx}
-       returning id, condo_id, unit_id, full_name, login, role, active, created_at`,
-      params,
+      `select u.id, m.condo_id, m.unit_id, u.full_name, u.login, m.role,
+              (u.active and m.active) as active, u.created_at
+       from app_user_condo_memberships m
+       join app_users u on u.id = m.user_id
+       where m.user_id = $1 and m.condo_id = $2`,
+      [id, condoId],
     );
 
     return res.json(r.rows[0]);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/app-users/:id/invite', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ message: 'id invalido.' });
+    }
+    const body = req.body || {};
+    const condoId = parseCondoId(body.condoId);
+    const actorId = parsePositive(body.userId);
+    if (actorId == null || condoId == null) {
+      return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
+    }
+
+    const actor = await loadHubUser(actorId, condoId);
+    if (!hubBillingAuthorized(actor, condoId)) {
+      return res.status(403).json({ message: 'Sem permissao para gerar convites.' });
+    }
+
+    const tgt = await query(
+      `select m.user_id
+       from app_user_condo_memberships m
+       where m.user_id = $1 and m.condo_id = $2
+       limit 1`,
+      [id, condoId],
+    );
+    if (tgt.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario nao encontrado neste condominio.' });
+    }
+
+    const user = await query(
+      `select id, active, password_hash, pending_activation
+       from app_users where id = $1 limit 1`,
+      [id],
+    );
+    if (user.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario nao encontrado.' });
+    }
+    const row = user.rows[0] as {
+      id: number;
+      active: boolean;
+      password_hash: string | null;
+      pending_activation: boolean;
+    };
+    if (row.active !== true) {
+      return res.status(400).json({ message: 'Usuario inativo.' });
+    }
+    if (row.password_hash && !row.pending_activation) {
+      return res.status(400).json({
+        message: 'Usuario ja possui senha definida. Use redefinicao de senha pela administracao.',
+      });
+    }
+
+    await query(`update app_users set pending_activation = true where id = $1`, [id]);
+    const invite = await createUserInvite(id, actorId);
+    return res.json({
+      userId: id,
+      inviteToken: invite.rawToken,
+      inviteUrl: buildInviteWebUrl(invite.rawToken),
+      inviteExpiresAt: invite.expiresAt.toISOString(),
+    });
   } catch (err) {
     return next(err);
   }
@@ -1387,7 +1639,7 @@ router.get('/condo-login-branding', async (req, res, next) => {
     if (actorId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const actor = await loadHubUser(actorId);
+    const actor = await loadHubUser(actorId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para editar aparencia da tela de login.' });
     }
@@ -1439,7 +1691,7 @@ router.patch('/condo-login-branding', async (req, res, next) => {
     if (nm.length > 150) {
       return res.status(400).json({ message: 'Nome com ate 150 caracteres.' });
     }
-    const actor = await loadHubUser(actorId);
+    const actor = await loadHubUser(actorId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Sem permissao.' });
     }
@@ -1483,7 +1735,7 @@ router.post('/condo-login-logo', loginBrandingImageUpload.single('logo'), async 
     if (actorId == null || condoId == null) {
       return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
     }
-    const actor = await loadHubUser(actorId);
+    const actor = await loadHubUser(actorId, condoId);
     if (!hubBillingAuthorized(actor, condoId)) {
       return res.status(403).json({ message: 'Sem permissao.' });
     }
@@ -1548,7 +1800,7 @@ router.post(
       if (actorId == null || condoId == null) {
         return res.status(400).json({ message: 'condoId e userId sao obrigatorios.' });
       }
-      const actor = await loadHubUser(actorId);
+      const actor = await loadHubUser(actorId, condoId);
       if (!hubBillingAuthorized(actor, condoId)) {
         return res.status(403).json({ message: 'Sem permissao.' });
       }

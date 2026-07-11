@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { isBillingStaff } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const router = Router();
 
@@ -39,19 +40,24 @@ type Viewer = {
   active: boolean;
 };
 
-async function loadViewer(userIdRaw: unknown): Promise<Viewer | null> {
+async function loadViewer(
+  userIdRaw: unknown,
+  condoId: number,
+): Promise<Viewer | null> {
   const id = parsePositive(userIdRaw);
   if (id == null) {
     return null;
   }
-  const r = await query(
-    `select id, role, condo_id, active from app_users where id = $1 limit 1`,
-    [id],
-  );
-  if (r.rows.length === 0) {
+  const row = await loadLegacyUserRow(id, condoId);
+  if (row == null) {
     return null;
   }
-  return r.rows[0] as Viewer;
+  return {
+    id: row.id,
+    role: row.role,
+    condo_id: row.condo_id,
+    active: row.active,
+  };
 }
 
 function canSeePrivateEvents(viewer: Viewer | null): boolean {
@@ -91,7 +97,7 @@ router.get('/events', async (req, res, next) => {
     const condoId = parseCondoId(req.query.condoId);
     const viewRaw = String(req.query.view ?? 'list').trim().toLowerCase();
     const includePast = req.query.includePast === 'true';
-    const viewer = await loadViewer(req.query.userId);
+    const viewer = await loadViewer(req.query.userId, condoId);
 
     if (viewer != null && viewer.active !== true) {
       return res.status(403).json({ message: 'Usuario inativo.' });
@@ -203,7 +209,7 @@ router.post('/events', async (req, res, next) => {
       return res.status(400).json({ message: 'title e obrigatorio.' });
     }
 
-    const viewer = await loadViewer(userId);
+    const viewer = await loadViewer(userId, condoId);
     if (!canManageAgenda(viewer, condoId)) {
       return res.status(403).json({
         message: 'Apenas sindico ou administracao podem cadastrar eventos na agenda.',
@@ -275,7 +281,7 @@ router.patch('/events/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const viewer = await loadViewer(userId);
+    const viewer = await loadViewer(userId, condoId);
     if (!canManageAgenda(viewer, condoId)) {
       return res.status(403).json({
         message: 'Apenas sindico ou administracao podem alterar eventos.',
@@ -415,7 +421,7 @@ router.delete('/events/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
 
-    const viewer = await loadViewer(userId);
+    const viewer = await loadViewer(userId, condoId);
     if (!canManageAgenda(viewer, condoId)) {
       return res.status(403).json({
         message: 'Apenas sindico ou administracao podem excluir eventos.',

@@ -7,6 +7,7 @@ import { Router, type Request, type Response } from 'express';
 
 import { isBillingStaff, isOperationalStaff } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const UPLOADS_ROOT = path.join(process.cwd(), 'uploads');
 
@@ -139,16 +140,8 @@ async function assertBillingStaffForNotices(
     res.status(400).json({ message: 'userId e obrigatorio para gerir avisos.' });
     return false;
   }
-  const ur = await query(
-    `select condo_id, role, active from app_users where id = $1 limit 1`,
-    [userId],
-  );
-  if (ur.rows.length === 0) {
-    res.status(403).json({ message: 'Usuario nao encontrado.' });
-    return false;
-  }
-  const u = ur.rows[0] as { condo_id: number; role: string; active: boolean };
-  if (!u.active || u.condo_id !== condoId || !isBillingStaff(u.role)) {
+  const u = await loadLegacyUserRow(userId, condoId);
+  if (u == null || !isBillingStaff(u.role)) {
     res.status(403).json({
       message: 'Apenas sindico ou administracao podem gerir avisos no mural.',
     });
@@ -167,16 +160,8 @@ async function assertOperationalStaffMaintenance(
     res.status(400).json({ message: 'userId e obrigatorio.' });
     return false;
   }
-  const ur = await query(
-    `select condo_id, role, active from app_users where id = $1 limit 1`,
-    [userId],
-  );
-  if (ur.rows.length === 0) {
-    res.status(403).json({ message: 'Usuario nao encontrado.' });
-    return false;
-  }
-  const u = ur.rows[0] as { condo_id: number; role: string; active: boolean };
-  if (!u.active || u.condo_id !== condoId || !isOperationalStaff(u.role)) {
+  const u = await loadLegacyUserRow(userId, condoId);
+  if (u == null || !isOperationalStaff(u.role)) {
     res.status(403).json({
       message: 'Acesso restrito a equipe do condominio.',
     });

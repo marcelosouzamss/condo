@@ -31,6 +31,11 @@ export function canManageCollaboratorsAndSchedule(role: string): boolean {
   return role === 'syndic' || role === 'administrator';
 }
 
+/** Layout da home do condomínio (grade, estilo, ordem dos módulos). */
+export function canManageCondoHomeLayout(role: string): boolean {
+  return isBillingStaff(role) || isPlatformAdmin(role);
+}
+
 /** Escala visível para síndico, administradora e colaboradores (não para morador). */
 export function canViewCollaboratorSchedule(role: string): boolean {
   return (

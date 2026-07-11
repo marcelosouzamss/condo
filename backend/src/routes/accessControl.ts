@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { isOperationalStaff } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const router = Router();
 
@@ -35,15 +36,12 @@ type AppUserRow = {
   unit_id: number | null;
 };
 
-async function loadUser(userId: number): Promise<AppUserRow | null> {
-  const r = await query(
-    `select id, condo_id, role, active, unit_id from app_users where id = $1 limit 1`,
-    [userId],
-  );
-  if (r.rows.length === 0) {
+async function loadUser(userId: number, condoId: number): Promise<AppUserRow | null> {
+  const row = await loadLegacyUserRow(userId, condoId);
+  if (row == null) {
     return null;
   }
-  return r.rows[0] as AppUserRow;
+  return row as AppUserRow;
 }
 
 function canAccessCondo(user: AppUserRow, condoId: number): boolean {
@@ -74,7 +72,7 @@ router.get('/stats', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -153,7 +151,7 @@ router.get('/visitor-passes', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -243,7 +241,7 @@ router.post('/visitor-passes', async (req, res, next) => {
       return res.status(400).json({ message: 'validUntil deve ser apos validFrom.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -342,7 +340,7 @@ router.patch('/visitor-passes/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'status deve ser revoked ou expired.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -458,7 +456,7 @@ router.post('/visitor-passes/:id/check-in', async (req, res, next) => {
       return res.status(400).json({ message: 'Dados invalidos.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -508,7 +506,7 @@ router.post('/visitor-passes/:id/check-out', async (req, res, next) => {
       return res.status(400).json({ message: 'Dados invalidos.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -559,7 +557,7 @@ router.post('/validate', async (req, res, next) => {
       return res.status(400).json({ message: 'Informe pinCode ou qrToken.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -626,7 +624,7 @@ router.get('/service-providers', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -667,7 +665,7 @@ router.post('/service-providers', async (req, res, next) => {
       return res.status(400).json({ message: 'condoId, userId e companyName sao obrigatorios.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -715,7 +713,7 @@ router.patch('/service-providers/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'Dados invalidos.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -785,7 +783,7 @@ router.get('/events', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }
@@ -857,7 +855,7 @@ router.post('/events', async (req, res, next) => {
       return res.status(400).json({ message: 'subjectName e obrigatorio.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || user.active !== true) {
       return res.status(404).json({ message: 'Usuario nao encontrado ou inativo.' });
     }

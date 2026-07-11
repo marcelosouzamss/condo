@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { query } from '../db';
+import { userHasPartnerRole } from '../userContext';
 
 const router = Router();
 
@@ -13,6 +14,23 @@ const CONDO_LIST_ROLES = new Set([
 ]);
 
 async function getActiveUserRole(userId: number): Promise<string | null> {
+  const mem = await query(
+    `select role
+     from app_user_condo_memberships
+     where user_id = $1 and active = true`,
+    [userId],
+  );
+  for (const row of mem.rows) {
+    const role = String(row.role);
+    if (CONDO_LIST_ROLES.has(role)) {
+      return role;
+    }
+  }
+
+  if (await userHasPartnerRole(userId)) {
+    return 'partner';
+  }
+
   const r = await query(
     `select role from app_users where id = $1 and active = true limit 1`,
     [userId],

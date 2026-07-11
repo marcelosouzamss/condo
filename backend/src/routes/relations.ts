@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { query } from '../db';
+import { userHasPartnerRole } from '../userContext';
 
 const router = Router();
 
@@ -46,11 +47,7 @@ async function assertUnitInCondo(
 }
 
 async function assertActivePartner(userId: number): Promise<boolean> {
-  const r = await query(
-    `select 1 from app_users where id = $1 and active = true and role = 'partner' limit 1`,
-    [userId],
-  );
-  return r.rows.length > 0;
+  return userHasPartnerRole(userId);
 }
 
 async function ensureThread(

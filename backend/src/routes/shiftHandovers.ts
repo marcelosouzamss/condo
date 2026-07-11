@@ -5,6 +5,7 @@ import {
   canViewShiftHandovers,
 } from '../authz';
 import { query } from '../db';
+import { loadLegacyUserRow } from '../userContext';
 
 const router = Router();
 
@@ -43,15 +44,18 @@ function parseMemberIds(raw: unknown): number[] {
   return [...new Set(out)];
 }
 
-async function loadUser(userId: number): Promise<AppUserRow | null> {
-  const r = await query(
-    `select id, condo_id, full_name, role, active
-     from app_users
-     where id = $1
-     limit 1`,
-    [userId],
-  );
-  return r.rows.length === 0 ? null : (r.rows[0] as AppUserRow);
+async function loadUser(userId: number, condoId: number): Promise<AppUserRow | null> {
+  const row = await loadLegacyUserRow(userId, condoId);
+  if (row == null) {
+    return null;
+  }
+  return {
+    id: row.id,
+    condo_id: row.condo_id,
+    full_name: row.full_name,
+    role: row.role,
+    active: row.active,
+  };
 }
 
 function canView(user: AppUserRow, condoId: number): boolean {
@@ -78,13 +82,15 @@ async function validateCollaboratorUsers(
     return [];
   }
   const r = await query(
-    `select id
-     from app_users
-     where condo_id = $1
-       and active = true
-       and role in ('collaborator', 'doorman')
-       and id = any($2::int[])
-     order by full_name asc`,
+    `select au.id
+     from app_user_condo_memberships m
+     join app_users au on au.id = m.user_id
+     where m.condo_id = $1
+       and m.active = true
+       and au.active = true
+       and m.role in ('collaborator', 'doorman')
+       and au.id = any($2::int[])
+     order by au.full_name asc`,
     [condoId, memberUserIds],
   );
   const ids = r.rows.map((row) => Number(row.id));
@@ -138,7 +144,7 @@ router.get('/collaborators', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || !canView(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para passagem de turno.' });
     }
@@ -164,7 +170,7 @@ router.get('/areas', async (req, res, next) => {
     if (userId == null) {
       return res.status(400).json({ message: 'userId e obrigatorio.' });
     }
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || !canView(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para passagem de turno.' });
     }
@@ -284,7 +290,7 @@ router.post('/areas', async (req, res, next) => {
       return res.status(400).json({ message: 'Area e servico sao obrigatorios.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || !canManage(user, condoId)) {
       return res.status(403).json({
         message: 'Apenas sindico ou administracao podem criar areas de passagem.',
@@ -337,7 +343,7 @@ router.patch('/areas/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'Area e servico sao obrigatorios.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || !canManage(user, condoId)) {
       return res.status(403).json({
         message: 'Apenas sindico ou administracao podem editar areas de passagem.',
@@ -391,7 +397,7 @@ router.post('/areas/:id/entries', async (req, res, next) => {
       return res.status(400).json({ message: 'Informe a passagem de turno.' });
     }
 
-    const user = await loadUser(userId);
+    const user = await loadUser(userId, condoId);
     if (user == null || !canView(user, condoId)) {
       return res.status(403).json({ message: 'Sem permissao para passagem de turno.' });
     }

@@ -1,9 +1,12 @@
 import path from 'node:path';
 
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type ErrorRequestHandler } from 'express';
 
+import { authMiddleware } from './auth/middleware';
 import { query } from './db';
+import authRouter from './routes/auth';
 import administratorRouter from './routes/administrator';
 import agendaRouter from './routes/agenda';
 import collaboratorsRouter from './routes/collaborators';
@@ -28,12 +31,15 @@ import accessControlRouter from './routes/accessControl';
 import emergencyRouter from './routes/emergency';
 import parcelDeliveriesRouter from './routes/parcelDeliveries';
 import condosRegistryRouter from './routes/condosRegistry';
+import homeLayoutRouter from './routes/homeLayout';
 
 const app = express();
 
+const corsOrigin = process.env.CORS_ORIGIN?.trim();
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: corsOrigin && corsOrigin !== '*' ? corsOrigin : true,
+    credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     // Inclui cabeçalhos que o app Flutter (sobretudo Web) envia em GET,
     // para o preflight OPTIONS não falhar (ex.: Cache-Control → no-cache).
@@ -46,6 +52,7 @@ app.use(
     ],
   }),
 );
+app.use(cookieParser());
 app.use((req, res, next) => {
   const pathOnly = (req.originalUrl ?? req.url ?? '').split('?')[0];
   const bigJson =
@@ -234,51 +241,9 @@ app.get('/api/auth/login-appearance', async (req, res, next) => {
 });
 
 app.use('/api/condos', condosRegistryRouter);
-
-app.post('/api/auth/login', async (req, res, next) => {
-  try {
-    const { login, password } = (req.body || {}) as {
-      login?: string;
-      password?: string;
-    };
-    const normalizedLogin = login?.trim().toLowerCase() || '';
-    const rawPassword = password?.trim() || '';
-
-    if (!normalizedLogin || !rawPassword) {
-      return res.status(400).json({ message: 'login e password sao obrigatorios.' });
-    }
-
-    const result = await query(
-      `select id, condo_id, unit_id, full_name, login, role, active
-       from app_users
-       where lower(login) = $1 and password_plain = $2
-       limit 1`,
-      [normalizedLogin, rawPassword],
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: 'Credenciais invalidas.' });
-    }
-
-    const user = result.rows[0];
-    if (user.active !== true) {
-      return res.status(403).json({ message: 'Usuario inativo.' });
-    }
-
-    return res.json({
-      user: {
-        id: user.id,
-        condoId: user.condo_id,
-        unitId: user.unit_id,
-        fullName: user.full_name,
-        login: user.login,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
+app.use('/api/auth', authRouter);
+app.use('/api/home-layout', homeLayoutRouter);
+app.use('/api', authMiddleware);
 
 app.use('/api/syndic', syndicRouter);
 app.use('/api/reservation-spaces', reservationSpacesRouter);
