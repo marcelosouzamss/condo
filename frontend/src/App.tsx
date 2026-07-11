@@ -3,6 +3,8 @@ import { AppHomePage } from './AppHomePage';
 import { AppSessionLayout } from './AppSessionLayout';
 import { LandingPage } from './LandingPage';
 import { FolhetoPage } from './FolhetoPage';
+import { SelectCondoPage } from './SelectCondoPage';
+import { ActivateAccountPage } from './ActivateAccountPage';
 import { LoginPage } from './LoginPage';
 import { AccessControlPage } from './portal/AccessControlPage';
 import { ContactCondoHubPage } from './portal/ContactCondoHubPage';
@@ -64,6 +66,8 @@ export function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/folheto/*" element={<FolhetoPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/ativar" element={<ActivateAccountPage />} />
+      <Route path="/select-condo" element={<SelectCondoPage />} />
       <Route path="/app" element={<AppSessionLayout />}>
         <Route index element={<AppHomePage />} />
         <Route path="cadastro-condominios" element={<CondoRegistryPage />} />

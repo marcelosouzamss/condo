@@ -7,7 +7,8 @@ import {
   isProxyOrApiDownMessage,
   uploadsUrl,
 } from './api';
-import { loadWebUserSession, saveWebUserSession, type WebUserPayload } from './webSession';
+import { readLastLoginCondoId, writeLastLoginCondoId } from './loginAppearanceStorage';
+import { loadWebUserSession, saveAccessToken, savePendingCondoSelection, saveWebUserSession, type AccessibleCondoOption, type WebUserPayload } from './webSession';
 import './LoginPage.css';
 
 type LoginAppearance = {
@@ -15,12 +16,6 @@ type LoginAppearance = {
   logoRelativePath: string | null;
   backgroundRelativePath: string | null;
 };
-
-function appearanceCondoIdFromEnv(): number {
-  const raw = import.meta.env.VITE_LOGIN_CONDO_ID?.trim() || '1';
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
 
 function LoginNavLink({
   href,
@@ -57,7 +52,18 @@ export function LoginPage() {
         return n;
       }
     }
-    return appearanceCondoIdFromEnv();
+    const last = readLastLoginCondoId();
+    if (last != null) {
+      return last;
+    }
+    const fromEnv = import.meta.env.VITE_LOGIN_CONDO_ID?.trim();
+    if (fromEnv) {
+      const n = Number.parseInt(fromEnv, 10);
+      if (Number.isFinite(n) && n > 0) {
+        return n;
+      }
+    }
+    return 1;
   }, [condoIdParam]);
 
   const [appearance, setAppearance] = useState<LoginAppearance>({
@@ -133,6 +139,7 @@ export function LoginPage() {
     try {
       const r = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login, password }),
       });
@@ -174,17 +181,84 @@ export function LoginPage() {
         return;
       }
       const user = (body as { user: Record<string, unknown> }).user;
+      const selectionRaw = (body as { condoSelection?: Record<string, unknown> }).condoSelection;
+      const mode = String(selectionRaw?.mode ?? 'auto');
+      const condosRaw = selectionRaw?.condos;
+      const condos: AccessibleCondoOption[] = Array.isArray(condosRaw)
+        ? condosRaw
+            .map((item) => {
+              if (!item || typeof item !== 'object') {
+                return null;
+              }
+              const row = item as Record<string, unknown>;
+              const condoId = Number(row.condoId);
+              if (!Number.isFinite(condoId)) {
+                return null;
+              }
+              return {
+                condoId,
+                condoName: String(row.condoName ?? 'Condomínio'),
+                role: String(row.role ?? 'resident'),
+                unitId:
+                  row.unitId == null || row.unitId === undefined
+                    ? null
+                    : Number(row.unitId),
+              };
+            })
+            .filter((item): item is AccessibleCondoOption => item != null)
+        : [];
+
       const id = Number(user.id);
+      const fullName = String(user.fullName ?? '');
+      const loginStr = String(user.login ?? '');
+
+      if (!Number.isFinite(id)) {
+        setError('Resposta inválida do servidor.');
+        return;
+      }
+
+      if (mode === 'pick' || user.condoId == null) {
+        const preAuthToken =
+          body &&
+          typeof body === 'object' &&
+          'preAuthToken' in body &&
+          typeof (body as { preAuthToken: unknown }).preAuthToken === 'string'
+            ? (body as { preAuthToken: string }).preAuthToken
+            : undefined;
+        savePendingCondoSelection({
+          id,
+          fullName,
+          login: loginStr,
+          condos,
+          preAuthToken,
+        });
+        setPasswordField('');
+        navigate('/select-condo', {
+          replace: true,
+          state: {
+            pending: { id, fullName, login: loginStr, condos, preAuthToken },
+          },
+        });
+        return;
+      }
+
+      const accessToken =
+        body &&
+        typeof body === 'object' &&
+        'accessToken' in body &&
+        typeof (body as { accessToken: unknown }).accessToken === 'string'
+          ? (body as { accessToken: string }).accessToken
+          : null;
+      if (accessToken) {
+        saveAccessToken(accessToken);
+      }
+
       const condoId = Number(user.condoId);
       const unitRaw = user.unitId;
       const unitId =
-        unitRaw === null || unitRaw === undefined
-          ? null
-          : Number(unitRaw);
-      const fullName = String(user.fullName ?? '');
-      const loginStr = String(user.login ?? '');
+        unitRaw === null || unitRaw === undefined ? null : Number(unitRaw);
       const role = String(user.role ?? 'resident');
-      if (!Number.isFinite(id) || !Number.isFinite(condoId)) {
+      if (!Number.isFinite(condoId)) {
         setError('Resposta inválida do servidor.');
         return;
       }
@@ -195,8 +269,11 @@ export function LoginPage() {
         fullName,
         login: loginStr,
         role,
+        condoName:
+          user.condoName != null ? String(user.condoName) : undefined,
       };
       saveWebUserSession(payload);
+      writeLastLoginCondoId(payload.condoId);
       setPasswordField('');
       navigate('/app', { replace: true });
     } catch {
@@ -300,6 +377,9 @@ export function LoginPage() {
 
           <p className="login-card__footer-note">
             Esqueceu a senha? Contacte a administração do condomínio.
+          </p>
+          <p className="login-card__footer-note">
+            Primeiro acesso? <Link to="/ativar">Ativar conta com convite</Link>
           </p>
         </div>
       </div>

@@ -2,7 +2,49 @@ export function homeFeatureOrderStorageKey(condoId: number, userId: number): str
   return `condo_home_feature_order_v1_${condoId}_${userId}`;
 }
 
+/** Override pessoal do morador (não altera o layout do condomínio). */
+export function homeFeatureOrderPersonalKey(condoId: number, userId: number): string {
+  return `condo_home_feature_order_personal_v2_${condoId}_${userId}`;
+}
+
+export function readPersonalHomeFeatureOrder(condoId: number, userId: number): string[] {
+  try {
+    const raw = localStorage.getItem(homeFeatureOrderPersonalKey(condoId, userId));
+    if (!raw) {
+      return [];
+    }
+    const decoded = JSON.parse(raw) as unknown;
+    if (!Array.isArray(decoded)) {
+      return [];
+    }
+    return decoded
+      .map((value) => (value == null ? '' : String(value).trim()))
+      .filter((label) => label.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function writePersonalHomeFeatureOrder(
+  condoId: number,
+  userId: number,
+  labels: string[],
+): void {
+  localStorage.setItem(
+    homeFeatureOrderPersonalKey(condoId, userId),
+    JSON.stringify(labels),
+  );
+}
+
+export function clearPersonalHomeFeatureOrder(condoId: number, userId: number): void {
+  localStorage.removeItem(homeFeatureOrderPersonalKey(condoId, userId));
+}
+
 export function readHomeFeatureOrder(condoId: number, userId: number): string[] {
+  const personal = readPersonalHomeFeatureOrder(condoId, userId);
+  if (personal.length > 0) {
+    return personal;
+  }
   try {
     const raw = localStorage.getItem(homeFeatureOrderStorageKey(condoId, userId));
     if (!raw) {

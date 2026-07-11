@@ -39,6 +39,10 @@ export function isBillingStaff(role: string): boolean {
   return role === CondoUserRoles.syndic || role === CondoUserRoles.administrator;
 }
 
+export function canManageCondoHomeLayout(role: string): boolean {
+  return isBillingStaff(role) || isPlatformAdmin(role);
+}
+
 export function isOperationalStaff(role: string): boolean {
   return (
     role === CondoUserRoles.syndic ||

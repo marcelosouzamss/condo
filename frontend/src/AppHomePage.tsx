@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { isOperationalStaff, labelPt } from './condoUserRoles';
+import { fetchCondoHomeLayout, saveCondoHomeLayout, type CondoHomeLayout } from './condoHomeLayoutApi';
+import { canManageCondoHomeLayout, isOperationalStaff, labelPt } from './condoUserRoles';
 import { displayLabelForFeature, HOME_FEATURE_LIST, homeFeaturesForUser, type HomeFeatureDef } from './homeFeatures';
 import {
   applyHomeFeatureOrder,
+  clearPersonalHomeFeatureOrder,
   normalizeHomeFeatureOrder,
-  readHomeFeatureOrder,
+  readPersonalHomeFeatureOrder,
   reorderHomeFeatureLabels,
-  writeHomeFeatureOrder,
+  writePersonalHomeFeatureOrder,
 } from './homeFeatureOrder';
 import {
   listEmergencyIncidents,
@@ -16,7 +18,8 @@ import {
   listResidentMaintenanceRequests,
   listSyndicMaintenanceRequests,
 } from './portalApi';
-import { clearWebUserSession, loadWebUserSession } from './webSession';
+import { logoutWebSession } from './jsonHttp';
+import { loadWebUserSession } from './webSession';
 import './AppHomePage.css';
 
 function searchKey(value: string): string {
@@ -85,11 +88,30 @@ export function AppHomePage() {
     readDismissedAlerts(session.condoId, session.id),
   );
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [featureOrder, setFeatureOrder] = useState<string[]>(() =>
-    readHomeFeatureOrder(session.condoId, session.id),
+  const [condoLayout, setCondoLayout] = useState<CondoHomeLayout | null>(null);
+  const [personalFeatureOrder, setPersonalFeatureOrder] = useState<string[]>(() =>
+    readPersonalHomeFeatureOrder(session.condoId, session.id),
   );
   const [draggingLabel, setDraggingLabel] = useState<string | null>(null);
   const [dropTargetLabel, setDropTargetLabel] = useState<string | null>(null);
+
+  const canEditCondoLayout =
+    condoLayout?.canEdit === true || canManageCondoHomeLayout(session.role);
+  const canPersonalizeOrder =
+    !canEditCondoLayout && (condoLayout?.allowResidentOrderOverride ?? true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const layout = await fetchCondoHomeLayout(session.condoId, session.id);
+      if (!cancelled) {
+        setCondoLayout(layout);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.condoId, session.id]);
 
   const onFeatureClick = useCallback(
     (feature: HomeFeatureDef) => {
@@ -136,25 +158,24 @@ export function AppHomePage() {
     });
   }, [features, searchQuery, session.role]);
 
-  const canReorderCards = searchQuery.trim().length === 0;
+  const canReorderCards =
+    searchQuery.trim().length === 0 && (canEditCondoLayout || canPersonalizeOrder);
+
+  const effectiveFeatureOrder = useMemo(() => {
+    const labels = features.map((feature) => feature.label);
+    const base = condoLayout?.featureOrder ?? [];
+    if (canEditCondoLayout) {
+      return normalizeHomeFeatureOrder(base, labels);
+    }
+    if (personalFeatureOrder.length > 0 && condoLayout?.allowResidentOrderOverride !== false) {
+      return normalizeHomeFeatureOrder(personalFeatureOrder, labels);
+    }
+    return normalizeHomeFeatureOrder(base, labels);
+  }, [canEditCondoLayout, condoLayout, features, personalFeatureOrder]);
 
   const orderedFeatures = useMemo(() => {
-    const labels = filteredFeatures.map((feature) => feature.label);
-    const normalized = normalizeHomeFeatureOrder(featureOrder, labels);
-    return applyHomeFeatureOrder(filteredFeatures, normalized);
-  }, [filteredFeatures, featureOrder]);
-
-  useEffect(() => {
-    const labels = features.map((feature) => feature.label);
-    setFeatureOrder((current) => {
-      const normalized = normalizeHomeFeatureOrder(current, labels);
-      if (normalized.length === current.length && normalized.every((label, i) => label === current[i])) {
-        return current;
-      }
-      writeHomeFeatureOrder(session.condoId, session.id, normalized);
-      return normalized;
-    });
-  }, [features, session.condoId, session.id]);
+    return applyHomeFeatureOrder(filteredFeatures, effectiveFeatureOrder);
+  }, [filteredFeatures, effectiveFeatureOrder]);
 
   const onCardDragStart = useCallback((label: string) => {
     setDraggingLabel(label);
@@ -171,20 +192,52 @@ export function AppHomePage() {
         onCardDragEnd();
         return;
       }
-      setFeatureOrder((current) => {
-        const labels = orderedFeatures.map((feature) => feature.label);
-        const normalized = normalizeHomeFeatureOrder(current, labels);
-        const next = reorderHomeFeatureLabels(normalized, draggingLabel, targetLabel);
-        writeHomeFeatureOrder(session.condoId, session.id, next);
-        return next;
-      });
+      const labels = orderedFeatures.map((feature) => feature.label);
+      const normalized = normalizeHomeFeatureOrder(effectiveFeatureOrder, labels);
+      const next = reorderHomeFeatureLabels(normalized, draggingLabel, targetLabel);
+      if (canEditCondoLayout) {
+        setCondoLayout((current) =>
+          current
+            ? { ...current, featureOrder: next }
+            : {
+                condoId: session.condoId,
+                featureOrder: next,
+                gridColumns: 2,
+                stylePreset: 'diurno',
+                allowResidentOrderOverride: true,
+                canEdit: true,
+              },
+        );
+        void saveCondoHomeLayout({
+          condoId: session.condoId,
+          userId: session.id,
+          featureOrder: next,
+        });
+      } else if (canPersonalizeOrder) {
+        setPersonalFeatureOrder(next);
+        writePersonalHomeFeatureOrder(session.condoId, session.id, next);
+      }
       onCardDragEnd();
     },
-    [draggingLabel, onCardDragEnd, orderedFeatures, session.condoId, session.id],
+    [
+      canEditCondoLayout,
+      canPersonalizeOrder,
+      draggingLabel,
+      effectiveFeatureOrder,
+      onCardDragEnd,
+      orderedFeatures,
+      session.condoId,
+      session.id,
+    ],
   );
 
+  const restoreCondoFeatureOrder = useCallback(() => {
+    clearPersonalHomeFeatureOrder(session.condoId, session.id);
+    setPersonalFeatureOrder([]);
+  }, [session.condoId, session.id]);
+
   const logout = useCallback(() => {
-    clearWebUserSession();
+    void logoutWebSession();
     navigate('/login', { replace: true });
   }, [navigate]);
 
@@ -382,7 +435,18 @@ export function AppHomePage() {
 
         <h2 className="app-home__section-title">Funcionalidades</h2>
         {canReorderCards && orderedFeatures.length > 1 ? (
-          <p className="app-home__reorder-hint">Segure e arraste um card para reorganizar.</p>
+          <p className="app-home__reorder-hint">
+            {canEditCondoLayout
+              ? 'Segure e arraste para definir a ordem para todos do condomínio.'
+              : 'Segure e arraste para personalizar só para você.'}
+          </p>
+        ) : null}
+        {canPersonalizeOrder && personalFeatureOrder.length > 0 ? (
+          <p className="app-home__reorder-hint">
+            <button type="button" className="app-home__ghost" onClick={restoreCondoFeatureOrder}>
+              Restaurar ordem do condomínio
+            </button>
+          </p>
         ) : null}
         {orderedFeatures.length === 0 ? (
           <p className="app-home__empty">

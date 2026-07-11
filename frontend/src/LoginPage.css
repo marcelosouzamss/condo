@@ -226,3 +226,48 @@
 .login-page__footer strong {
   color: rgba(255, 255, 255, 0.95);
 }
+
+.login-card__subtitle {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.select-condo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.select-condo-list__item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(12, 107, 88, 0.18);
+  border-radius: 12px;
+  background: #f8fbfa;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.select-condo-list__item:hover {
+  border-color: rgba(12, 107, 88, 0.42);
+  background: #eef6f3;
+}
+
+.select-condo-list__name {
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.select-condo-list__role {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
